@@ -1,0 +1,1479 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+</head>
+<body>
+<script>
+  // GitHub Pages only: paste your Cloudflare Worker URL between the quotes. Netlify needs no change.
+  window.SAATHI_AI = { workerUrl: "" };
+</script>
+<title>Saathi MVP</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: app bar with tabs; each view is a two-pane workspace (controls left, results right) that stacks on phones. */
+:root{
+  --bg:#F6F5FA; --surface:#FFFFFF; --sunk:#EFECF5; --ink:#1B1930; --muted:#5E5A73; --line:#E1DDEA;
+  --accent:#B0175A; --accent-soft:#FBE3EE; --on-accent:#FFFFFF; --indigo:#2E3F8F; --indigo-soft:#E5E9FA;
+  --good:#1D7A4B; --good-soft:#DFF3E8; --warn:#9A5B00; --warn-soft:#FBEED7; --bad:#B3261E; --bad-soft:#FBE1DE;
+  --f-display:"Bricolage Grotesque", "Trebuchet MS", sans-serif; --f-body:"Instrument Sans", "Segoe UI", Arial, sans-serif; --f-mono:"JetBrains Mono", ui-monospace, Menlo, monospace;
+  --r:12px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#13111D; --surface:#1C1A2A; --sunk:#232035; --ink:#EEEAF7; --muted:#A6A1BC; --line:#302C45;
+  --accent:#F0609B; --accent-soft:#3A1A2B; --on-accent:#1B0C14; --indigo:#93A5F6; --indigo-soft:#1F2547;
+  --good:#5CC48F; --good-soft:#15301F; --warn:#E6A94E; --warn-soft:#33260F; --bad:#F2837A; --bad-soft:#3A1715; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#13111D; --surface:#1C1A2A; --sunk:#232035; --ink:#EEEAF7; --muted:#A6A1BC; --line:#302C45;
+  --accent:#F0609B; --accent-soft:#3A1A2B; --on-accent:#1B0C14; --indigo:#93A5F6; --indigo-soft:#1F2547;
+  --good:#5CC48F; --good-soft:#15301F; --warn:#E6A94E; --warn-soft:#33260F; --bad:#F2837A; --bad-soft:#3A1715; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;margin:0}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+h1,h2,h3{font-family:var(--f-display);font-weight:700;line-height:1.15;text-wrap:balance;margin:0}
+h2{font-size:22px} h3{font-size:16px}
+p{margin:0}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--indigo);outline-offset:2px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+
+/* app bar */
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+.bar-in{max-width:1280px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:10px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand b{font-family:var(--f-display);font-size:24px;letter-spacing:-0.5px}
+.brand b i{font-style:normal;color:var(--accent)}
+.brand span{font-size:12px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin-left:auto}
+.tab{border:0;background:transparent;padding:8px 12px;border-radius:999px;color:var(--muted);font-weight:600;font-size:14px}
+.tab[aria-selected="true"]{background:var(--ink);color:var(--bg)}
+.tab .n{display:inline-block;min-width:18px;padding:0 5px;margin-left:4px;border-radius:9px;background:var(--accent);color:var(--on-accent);font-size:11px;line-height:18px;text-align:center}
+.ai-pill{font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted);display:flex;align-items:center;gap:6px;background:transparent}
+.ai-pill .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.ai-pill.on .dot{background:var(--good)}
+
+main{max-width:1280px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.view{display:grid;grid-template-columns:minmax(0,400px) minmax(0,1fr);gap:24px;align-items:start}
+.view.wide{grid-template-columns:minmax(0,1fr)}
+@media (max-width:900px){.view{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.stack{display:flex;flex-direction:column;gap:16px;min-width:0}
+.eyebrow{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent);font-weight:600}
+.lede{color:var(--muted);font-size:14px}
+
+/* inputs */
+textarea,input[type=text],input[type=number],select{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+textarea{min-height:92px;resize:vertical}
+label.f{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--muted)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn{border:1px solid var(--ink);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:999px;font-weight:600;font-size:14px}
+.btn.alt{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn.acc{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.sm{padding:6px 12px;font-size:13px}
+.btn:disabled{opacity:.5;cursor:default}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:13px;text-align:left}
+.chip:hover{border-color:var(--ink)}
+.chip.persona{display:flex;flex-direction:column;align-items:flex-start;border-radius:12px;padding:8px 12px;gap:1px;flex:1 1 160px}
+.chip.persona b{font-size:13px}.chip.persona span{font-size:12px;color:var(--muted)}
+.tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 9px;border-radius:999px;background:var(--sunk);color:var(--ink)}
+.tag button{border:0;background:transparent;padding:0;color:var(--muted);font-size:14px;line-height:1}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:13px}
+.seg button[aria-pressed="true"]{background:var(--indigo);border-color:var(--indigo);color:var(--surface)}
+
+/* thread */
+.thread{display:flex;flex-direction:column;gap:10px}
+.msg{padding:10px 14px;border-radius:14px;max-width:92%;font-size:14px}
+.msg.user{align-self:flex-end;background:var(--ink);color:var(--bg);border-bottom-right-radius:4px}
+.msg.bot{align-self:flex-start;background:var(--sunk);border-bottom-left-radius:4px;display:flex;flex-direction:column;gap:8px}
+.msg.bot .q{font-weight:600}
+
+/* agent trace */
+.trace{border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.trace summary{cursor:pointer;padding:10px 12px;font-weight:600;font-size:13px;list-style:none;display:flex;justify-content:space-between;gap:8px}
+.trace summary::-webkit-details-marker{display:none}
+.trace ol{list-style:none;margin:0;padding:0 12px 12px;display:flex;flex-direction:column;gap:8px}
+.trace li{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:8px;font-size:13px;align-items:start}
+.trace li .st{width:12px;height:12px;border-radius:50%;margin-top:4px;background:var(--line)}
+.trace li.done .st{background:var(--good)}
+.trace li.run .st{background:var(--warn);animation:pulse 1s infinite}
+.trace li.skip .st{background:transparent;border:2px solid var(--line)}
+.trace li .d{color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.trace li .t{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+@keyframes pulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.trace li.run .st{animation:none}}
+
+/* results */
+.res-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+@media (max-width:640px){.cards{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);display:grid;grid-template-columns:116px minmax(0,1fr);gap:14px;padding:14px;min-width:0}
+.card .thumb{background:var(--sunk);border-radius:10px;display:flex;align-items:center;justify-content:center;aspect-ratio:3/4;max-width:100%}
+.card .thumb svg{width:84%;height:auto}
+.card .body{display:flex;flex-direction:column;gap:6px;min-width:0}
+.slot{font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--indigo)}
+.card h3{font-size:15px;font-family:var(--f-body);font-weight:600}
+.meta{font-size:12px;color:var(--muted)}
+.price{font-family:var(--f-mono);font-size:15px;font-weight:500}
+.price s{color:var(--muted);font-size:12px;margin-left:6px}
+.why{list-style:none;margin:2px 0 0;padding:0;display:flex;flex-direction:column;gap:3px;font-size:12.5px}
+.why li{display:grid;grid-template-columns:14px 1fr;gap:6px}
+.why li::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--good);margin-top:7px}
+.why li.w::before{background:var(--warn)}
+.fitb{display:inline-flex;gap:6px;align-items:center;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;width:max-content;max-width:100%}
+.fitb.hi{background:var(--good-soft);color:var(--good)} .fitb.mid{background:var(--warn-soft);color:var(--warn)} .fitb.lo{background:var(--bad-soft);color:var(--bad)} .fitb.none{background:var(--sunk);color:var(--muted)}
+.card .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;align-items:center}
+.card select{width:auto;padding:5px 8px;font-size:13px}
+.dupnote{font-size:13px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.linkbtn{border:0;background:none;color:var(--indigo);font-weight:600;padding:0;font-size:13px;text-decoration:underline;text-underline-offset:3px}
+.empty{border:1px dashed var(--line);border-radius:var(--r);padding:28px;text-align:center;color:var(--muted);display:flex;flex-direction:column;gap:8px;align-items:center}
+
+/* tables */
+.tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);font-weight:600;background:var(--sunk);position:sticky;top:0}
+td.num,th.num{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:0}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:6px;border:1px solid var(--line)}
+
+/* reel */
+.drop{border:2px dashed var(--line);border-radius:var(--r);padding:20px;text-align:center;display:flex;flex-direction:column;gap:8px;align-items:center;background:var(--bg)}
+.drop.over{border-color:var(--accent)}
+.frames{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.frame{border:1px solid var(--line);border-radius:10px;overflow:hidden;padding:0;background:var(--sunk);display:flex;flex-direction:column}
+.frame img{display:block;width:100%;aspect-ratio:9/16;object-fit:cover}
+.frame span{font-size:12px;padding:6px;text-align:center}
+.refbox{display:grid;grid-template-columns:120px minmax(0,1fr);gap:14px;align-items:start}
+.refbox img{border-radius:10px;width:120px;aspect-ratio:9/16;object-fit:cover;border:1px solid var(--line)}
+.swpair{display:flex;gap:8px;align-items:center;font-size:12px}
+.swbig{width:28px;height:28px;border-radius:8px;border:1px solid var(--line)}
+
+/* mini you */
+.avatarwrap{display:grid;grid-template-columns:minmax(0,260px) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:640px){.avatarwrap{grid-template-columns:minmax(0,1fr)}}
+.avatar{background:var(--sunk);border-radius:var(--r);padding:10px;max-width:100%}
+.avatar svg{width:100%;height:auto;display:block}
+.meas{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.meas div{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.meas b{display:block;font-family:var(--f-mono);font-size:18px;font-weight:500}
+.meas span{font-size:12px;color:var(--muted)}
+.zl{display:flex;flex-direction:column;gap:6px}
+.zl div{display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:6px 10px;border-radius:8px}
+.zl .good{background:var(--good-soft);color:var(--good)} .zl .tight{background:var(--bad-soft);color:var(--bad)} .zl .loose{background:var(--warn-soft);color:var(--warn)}
+.log{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px;font-size:13px}
+.log li{padding:8px 10px;background:var(--bg);border:1px solid var(--line);border-radius:8px}
+
+/* cart */
+.citem{display:grid;grid-template-columns:72px minmax(0,1fr);gap:12px;padding:14px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+.citem .thumb{background:var(--sunk);border-radius:8px;display:flex;align-items:center;justify-content:center;aspect-ratio:3/4}
+.citem .thumb svg{width:80%}
+.flag{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;font-size:13px;padding:8px 10px;border-radius:8px}
+.flag.high{background:var(--bad-soft);color:var(--bad)} .flag.med{background:var(--warn-soft);color:var(--warn)} .flag.low{background:var(--sunk);color:var(--muted)} .flag.ok{background:var(--good-soft);color:var(--good)}
+.flag .lv{font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.8px;margin-right:6px}
+.riskbar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.kpi b{font-family:var(--f-display);font-size:30px;line-height:1}
+.kpi span{font-size:12px;color:var(--muted)}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+@media (max-width:720px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* pilot */
+.slider{display:grid;grid-template-columns:minmax(0,1fr) 64px;gap:4px 12px;align-items:center;font-size:13px}
+.slider input{grid-column:1/-1;width:100%;accent-color:var(--accent)}
+.slider output{font-family:var(--f-mono);text-align:right}
+.big{font-family:var(--f-display);font-size:44px;line-height:1;color:var(--accent)}
+.flow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (max-width:720px){.flow{grid-template-columns:minmax(0,1fr)}}
+.node{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg);font-size:13px;display:flex;flex-direction:column;gap:2px}
+.node b{font-size:13px}
+.node.core{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.node.core span{color:var(--bg);opacity:.8}
+.node span{color:var(--muted)}
+.plan{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+@media (max-width:720px){.plan{grid-template-columns:minmax(0,1fr)}}
+.plan li{border-top:3px solid var(--accent);background:var(--surface);border-radius:0 0 10px 10px;padding:10px 12px;font-size:13px;display:flex;flex-direction:column;gap:4px;border-left:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.plan li b{font-family:var(--f-mono);font-size:12px;color:var(--accent)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;z-index:20;max-width:calc(100% - 32px)}
+</style>
+
+<header class="bar">
+  <div class="bar-in">
+    <div class="brand"><b>Saathi<i>.</i></b><span>MVP · 100-SKU pilot</span></div>
+    <nav class="tabs" role="tablist" id="tabs">
+      <button class="tab" role="tab" data-v="shop">Concierge</button>
+      <button class="tab" role="tab" data-v="reel">Reel-to-Cart</button>
+      <button class="tab" role="tab" data-v="miniyou">Mini You</button>
+      <button class="tab" role="tab" data-v="cart">Cart &amp; fit check<span class="n" id="cartN" hidden>0</span></button>
+      <button class="tab" role="tab" data-v="catalog">Catalog</button>
+      <button class="tab" role="tab" data-v="pilot">Pilot metrics</button>
+    </nav>
+    <button class="ai-pill" id="aiPill" title="Switch between AI reasoning and built-in rules"><span class="dot"></span><span id="aiTxt">Connecting to AI…</span></button>
+  </div>
+</header>
+
+<main>
+<!-- ===== CONCIERGE ===== -->
+<section id="v-shop" class="view" hidden>
+  <div class="stack">
+    <div class="panel">
+      <div><div class="eyebrow">Say it</div><h2>Tell Saathi what you need</h2></div>
+      <p class="lede">Describe the occasion, place, budget and look, in English, Hindi or Hinglish. To speak instead of typing, tap the mic on your phone keyboard.</p>
+      <form id="askForm" class="stack" style="gap:10px">
+        <label for="ask" class="muted small" style="font-weight:600">Your brief</label>
+        <textarea id="ask" placeholder="e.g. Breathable pastel ethnic outfit for a humid daytime wedding in Mumbai under ₹6,000 that pairs with silver jewellery"></textarea>
+        <div class="row"><button class="btn acc" type="submit" id="askBtn">Find my picks</button><button class="btn alt sm" type="button" id="speakBtn" hidden>Read reply aloud</button></div>
+      </form>
+      <div class="stack" style="gap:8px">
+        <div class="muted small" style="font-weight:600">Try a persona</div>
+        <div class="chips" id="personas"></div>
+      </div>
+    </div>
+    <div class="panel" id="convPanel" hidden>
+      <div class="thread" id="thread"></div>
+      <details class="trace" id="trace" open><summary><span>How Saathi worked it out</span><span class="mono muted" id="traceT"></span></summary><ol id="traceList"></ol></details>
+    </div>
+  </div>
+  <div class="stack" id="shopResults">
+    <div class="empty"><h3>Your picks show up here</h3><p class="small">Three to four distinct options, each with the reason it fits, instead of a feed of near-identical products.</p></div>
+  </div>
+</section>
+
+<!-- ===== REEL ===== -->
+<section id="v-reel" class="view" hidden>
+  <div class="stack">
+    <div class="panel">
+      <div><div class="eyebrow">Show it</div><h2>Shop a look you saw</h2></div>
+      <p class="lede">Add a screenshot of a reel or post. Saathi reads the garment, colour, fabric and style, then finds the closest pieces in the catalog.</p>
+      <div class="drop" id="drop">
+        <b>Drop a screenshot here</b>
+        <span class="small muted">JPG, PNG or WebP</span>
+        <label class="btn alt sm" for="reelFile">Choose image</label>
+        <input type="file" id="reelFile" accept="image/jpeg,image/png,image/webp" hidden>
+      </div>
+      <div class="stack" style="gap:8px">
+        <div class="muted small" style="font-weight:600">Or use a sample reel frame</div>
+        <div class="frames" id="frames"></div>
+      </div>
+      <label class="f" for="reelNote">Anything to add? (optional)
+        <input type="text" id="reelNote" placeholder="e.g. under ₹3,000, for Goa">
+      </label>
+      <div class="stack" id="reelCatAsk" hidden style="gap:8px">
+        <div class="small" style="font-weight:600">What kind of item is it?</div>
+        <div class="seg" id="reelCats"></div>
+      </div>
+      <button class="btn acc" id="reelGo" disabled>Find similar</button>
+    </div>
+    <div class="panel" id="reelTracePanel" hidden>
+      <details class="trace" open><summary><span>How Saathi worked it out</span><span class="mono muted" id="reelTraceT"></span></summary><ol id="reelTrace"></ol></details>
+    </div>
+  </div>
+  <div class="stack" id="reelResults">
+    <div class="empty"><h3>Similar pieces show up here</h3><p class="small">Closest match, a budget alternative and a different take. Repeat look-alikes are grouped.</p></div>
+  </div>
+</section>
+
+<!-- ===== MINI YOU ===== -->
+<section id="v-miniyou" class="view" hidden>
+  <div class="stack">
+    <div class="panel">
+      <div><div class="eyebrow">Fit it</div><h2>Build your Mini You</h2></div>
+      <p class="lede">About 60 seconds. Saathi estimates your measurements and predicts your size in each brand from the garment’s real measurements, not the label.</p>
+      <form id="profForm" class="stack" style="gap:12px">
+        <div class="stack" style="gap:6px"><span class="small muted" style="font-weight:600">Shopping for</span>
+          <div class="seg" id="pGender"><button type="button" data-v="W">Women’s wear</button><button type="button" data-v="M">Men’s wear</button></div></div>
+        <div class="grid2">
+          <label class="f" for="pH">Height (cm)<input type="number" id="pH" min="135" max="210" value="162"></label>
+          <label class="f" for="pW">Weight (kg)<input type="number" id="pW" min="35" max="160" value="58"></label>
+        </div>
+        <div class="stack" style="gap:6px"><span class="small muted" style="font-weight:600">Body shape</span><div class="seg" id="pShape"></div></div>
+        <div class="stack" style="gap:6px"><span class="small muted" style="font-weight:600">How do you like clothes to fit?</span>
+          <div class="seg" id="pFit"><button type="button" data-v="snug">Snug</button><button type="button" data-v="regular">As designed</button><button type="button" data-v="relaxed">Relaxed</button></div></div>
+        <details><summary class="small" style="cursor:pointer;font-weight:600">I know my measurements (optional)</summary>
+          <div class="grid2" id="pOver" style="margin-top:10px"></div></details>
+        <button class="btn acc" type="submit">Save Mini You</button>
+      </form>
+    </div>
+    <div class="panel" id="photoPanel">
+      <h3>Refine with 2 photos (optional)</h3>
+      <p class="small muted">A front and a side photo in fitted clothes let the AI model read your proportions. In this MVP the photos are sent to the AI model for one reading and are not saved; production would process them on your phone and keep only measurements.</p>
+      <div class="grid2">
+        <label class="f" for="phF">Front photo<input type="file" id="phF" accept="image/jpeg,image/png,image/webp"></label>
+        <label class="f" for="phS">Side photo<input type="file" id="phS" accept="image/jpeg,image/png,image/webp"></label>
+      </div>
+      <label class="small row" for="phOk" style="gap:8px;flex-wrap:nowrap;align-items:flex-start"><input type="checkbox" id="phOk" style="margin-top:3px"> <span>I agree to send these two photos to the AI model to estimate my proportions.</span></label>
+      <button class="btn alt" id="phGo" disabled>Read my proportions</button>
+      <p class="small" id="phOut"></p>
+    </div>
+  </div>
+  <div class="stack" id="myOut"></div>
+</section>
+
+<!-- ===== CART ===== -->
+<section id="v-cart" class="view" hidden>
+  <div class="stack" id="cartList"></div>
+  <div class="stack" id="cartSide"></div>
+</section>
+
+<!-- ===== CATALOG ===== -->
+<section id="v-catalog" class="view wide" hidden>
+  <div class="panel">
+    <div class="res-head"><div><div class="eyebrow">Pilot data</div><h2>The 100-SKU catalog</h2><p class="lede">Synthetic pilot catalog: 9 brands with their own size quirks, 20 fabrics scored for breathability, occasion tags, stock by size and historical return rates.</p></div>
+      <div class="row"><button class="btn alt sm" id="dlCsv" hidden>Download CSV</button><button class="btn alt sm" id="dlJson" hidden>Download JSON</button></div></div>
+    <div class="row">
+      <input type="text" id="catQ" placeholder="Search name, colour, fabric, brand" style="flex:1 1 220px;width:auto">
+      <select id="catC" style="flex:0 1 200px;width:auto" aria-label="Category"></select>
+      <select id="catG" style="flex:0 1 140px;width:auto" aria-label="Gender"><option value="">All</option><option value="W">Women</option><option value="M">Men</option></select>
+    </div>
+    <p class="small muted" id="catCount"></p>
+    <div class="tblwrap" style="max-height:620px;overflow:auto"><table id="catTbl"></table></div>
+  </div>
+</section>
+
+<!-- ===== PILOT ===== -->
+<section id="v-pilot" class="view wide" hidden>
+  <div class="stack">
+    <div><div class="eyebrow">This session</div><h2>What Saathi did while you tested</h2></div>
+    <div class="kpis" id="sessKpis"></div>
+    <div class="view" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+      <div class="panel">
+        <h3>Impact model for the 8-week pilot</h3>
+        <p class="small muted">Move the assumptions to see what the platform-wide numbers become. Defaults are the team’s case assumptions.</p>
+        <div class="slider"><label for="s1">Share of searches that go through Saathi</label><output id="o1"></output><input type="range" id="s1" min="5" max="70" value="30"></div>
+        <div class="slider"><label for="s2">Conversion of guided vs unguided search (×)</label><output id="o2"></output><input type="range" id="s2" min="10" max="40" value="17"></div>
+        <div class="slider"><label for="s3">Size/style returns cut on guided orders</label><output id="o3"></output><input type="range" id="s3" min="0" max="60" value="30"></div>
+        <div class="slider"><label for="s4">Share of orders that are guided</label><output id="o4"></output><input type="range" id="s4" min="10" max="90" value="50"></div>
+        <div class="riskbar">
+          <div class="kpi"><span>Search-to-checkout</span><b class="big" id="impC"></b><span class="mono" id="impCf"></span></div>
+          <div class="kpi"><span>Size- and style-related returns</span><b class="big" id="impR"></b><span class="mono" id="impRf"></span></div>
+        </div>
+        <p class="small" id="impVerdict"></p>
+      </div>
+      <div class="panel">
+        <h3>How the agents fit together</h3>
+        <div class="flow">
+          <div class="node"><b>Input</b><span>Text, Hinglish, dictation, reel screenshot</span></div>
+          <div class="node core"><b>Orchestrator</b><span>Plans the steps, asks at most one question</span></div>
+          <div class="node"><b>Intent agent</b><span>The LLM turns the brief into hard and soft constraints</span></div>
+          <div class="node"><b>Vision agent</b><span>A vision model reads garment, colour, fabric, style; colour extraction as backup</span></div>
+          <div class="node"><b>Context agent</b><span>City climate, occasion norms, day or night</span></div>
+          <div class="node"><b>Fit agent</b><span>Mini You vs each brand’s garment chart</span></div>
+          <div class="node"><b>Retrieval</b><span>Scores all 100 SKUs; hard filters first</span></div>
+          <div class="node core"><b>Stylist critic</b><span>Groups look-alikes, picks 3–4 distinct slots, writes reasons from catalog facts</span></div>
+          <div class="node"><b>Learning loop</b><span>Return reasons update your Mini You</span></div>
+        </div>
+        <p class="small muted">Every reason shown to the shopper is built from catalog fields, so Saathi cannot invent a fabric or a size.</p>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>8-week pilot plan</h3>
+      <ol class="plan">
+        <li><b>Weeks 1–2</b><strong>Data</strong><span class="small muted">Tag top 2,000 SKUs (fabric, occasion, pairing); add garment measurements per size per brand.</span></li>
+        <li><b>Weeks 3–4</b><strong>Build</strong><span class="small muted">Concierge, Reel-to-Cart and Mini You lite on LLM and vision APIs; fit check at checkout.</span></li>
+        <li><b>Weeks 5–7</b><strong>A/B test</strong><span class="small muted">10% of search traffic, women’s ethnic and co-ords. Daily guardrails on latency and refusals.</span></li>
+        <li><b>Week 8</b><strong>Decide</strong><span class="small muted">Scale if search-to-checkout ≥ +15% and size/style returns ≤ −10%; else iterate one more cycle.</span></li>
+      </ol>
+    </div>
+    <div class="panel">
+      <h3>What is real and what is stubbed in this MVP</h3>
+      <div class="tblwrap"><table>
+        <tr><th>Part</th><th>In this MVP</th><th>In production</th></tr>
+        <tr><td>Understanding the brief</td><td>Free LLM via Groq (Llama) plus a built-in Hinglish rule parser as fallback</td><td>Same, with a fine-tuned intent model for speed</td></tr>
+        <tr><td>Reel reading</td><td>Free vision model via Groq on a screenshot; colour extraction backup</td><td>Share-sheet intake, image embeddings over the full catalog</td></tr>
+        <tr><td>Voice</td><td>Keyboard dictation; replies read aloud</td><td>In-app voice in regional languages</td></tr>
+        <tr><td>Mini You</td><td>Height, weight, shape and measurement overrides; optional photo reading</td><td>On-device body capture, 3D fit map, try-on</td></tr>
+        <tr><td>Weather</td><td>Built-in climate table for 16 cities</td><td>Live forecast for the event date</td></tr>
+        <tr><td>Catalog</td><td>100 synthetic SKUs</td><td>Platform catalog with live stock</td></tr>
+      </table></div>
+    </div>
+  </div>
+</section>
+</main>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const DATA = {"skus":[{"sku":"SA-001","name":"Sage green Chanderi Chikankari kurta set","brand":"Kesar Loom","cat":"kurta_set","catLabel":"Kurta set","gender":"W","colour":"Sage green","hex":"#A8BFA0","family":"green","pastel":true,"fabric":"Chanderi","breath":4,"stretch":0,"work":"Chikankari","styles":["embroidered"],"occasions":["wedding_day","festive","mehendi"],"daynight":["day"],"metal":"silver","fit":"regular","price":4890,"mrp":4890,"rating":4.3,"reviews":83,"returnRate":0.2,"sizeOffset":0,"stock":{"XS":2,"S":0,"M":8,"L":6,"XL":6,"XXL":4}},{"sku":"SA-002","name":"White georgette Leheriya saree","brand":"Coastline Co.","cat":"saree","catLabel":"Saree","gender":"W","colour":"White","hex":"#FAFAF7","family":"white","pastel":false,"fabric":"Georgette","breath":3,"stretch":0,"work":"Leheriya","styles":["printed"],"occasions":["wedding_night","wedding_day"],"daynight":[],"metal":"silver","fit":"free","price":5950,"mrp":5950,"rating":4.6,"reviews":466,"returnRate":0.2,"sizeOffset":3,"stock":{"Free":30}},{"sku":"SA-003","name":"Mustard chiffon Ikat saree","brand":"Saanjh Atelier","cat":"saree","catLabel":"Saree","gender":"W","colour":"Mustard","hex":"#C9A227","family":"yellow","pastel":false,"fabric":"Chiffon","breath":3,"stretch":0,"work":"Ikat","styles":["printed"],"occasions":["festive","wedding_day"],"daynight":[],"metal":"gold","fit":"free","price":10360,"mrp":13990,"rating":4.2,"reviews":923,"returnRate":0.13,"sizeOffset":1,"stock":{"Free":24}},{"sku":"SA-004","name":"Powder blue poly-viscose trousers","brand":"Mill & Mandi","cat":"trousers","catLabel":"Trousers","gender":"M","colour":"Powder blue","hex":"#B7CCE5","family":"blue","pastel":true,"fabric":"Poly-viscose","breath":2,"stretch":1,"work":"Solid","styles":["fitted","minimal"],"occasions":["casual","office","vacation"],"daynight":[],"metal":"silver","fit":"slim","price":1300,"mrp":1760,"rating":4.6,"reviews":299,"returnRate":0.3,"sizeOffset":1,"stock":{"S":10,"M":6,"L":0,"XL":10,"XXL":2}},{"sku":"SA-005","name":"Powder blue georgette Floral print anarkali","brand":"Ritu Lane","cat":"anarkali","catLabel":"Anarkali","gender":"W","colour":"Powder blue","hex":"#B7CCE5","family":"blue","pastel":true,"fabric":"Georgette","breath":3,"stretch":0,"work":"Floral print","styles":["flared","printed"],"occasions":["mehendi","festive"],"daynight":[],"metal":"silver","fit":"regular","price":4930,"mrp":5920,"rating":4.1,"reviews":161,"returnRate":0.24,"sizeOffset":-1,"stock":{"XS":14,"S":6,"M":8,"L":0,"XL":14,"XXL":0}},{"sku":"SA-006","name":"Lemon linen Brocade nehru jacket","brand":"Mill & Mandi","cat":"nehru","catLabel":"Nehru jacket","gender":"M","colour":"Lemon","hex":"#F3E7A0","family":"yellow","pastel":true,"fabric":"Linen","breath":5,"stretch":0,"work":"Brocade","styles":["fitted","textured"],"occasions":["festive"],"daynight":["day"],"metal":"gold","fit":"slim","price":4500,"mrp":6750,"rating":4.8,"reviews":1091,"returnRate":0.25,"sizeOffset":1,"stock":{"S":10,"M":2,"L":22,"XL":4,"XXL":0}},{"sku":"SA-007","name":"Turmeric yellow georgette Chikankari kurta set","brand":"Neel Studio","cat":"kurta_set","catLabel":"Kurta set","gender":"W","colour":"Turmeric yellow","hex":"#E3A82B","family":"yellow","pastel":false,"fabric":"Georgette","breath":3,"stretch":0,"work":"Chikankari","styles":["embroidered","fitted"],"occasions":["casual"],"daynight":[],"metal":"gold","fit":"slim","price":3030,"mrp":4090,"rating":4.3,"reviews":532,"returnRate":0.31,"sizeOffset":-2,"stock":{"XS":4,"S":8,"M":8,"L":6,"XL":10,"XXL":6}},{"sku":"SA-008","name":"Maroon denim Oxford shirt","brand":"Mill & Mandi","cat":"shirt","catLabel":"Shirt","gender":"M","colour":"Maroon","hex":"#7A1F2B","family":"red","pastel":false,"fabric":"Denim","breath":2,"stretch":1,"work":"Oxford","styles":["minimal"],"occasions":["vacation"],"daynight":["night"],"metal":"gold","fit":"regular","price":2170,"mrp":2930,"rating":4.1,"reviews":330,"returnRate":0.19,"sizeOffset":1,"stock":{"S":18,"M":14,"L":14,"XL":2,"XXL":10}},{"sku":"SA-009","name":"Sage green Chanderi Chikankari kurta set","brand":"Neel Studio","cat":"kurta_set","catLabel":"Kurta set","gender":"W","colour":"Sage green","hex":"#A8BFA0","family":"green","pastel":true,"fabric":"Chanderi","breath":4,"stretch":0,"work":"Chikankari","styles":["embroidered","fitted"],"occasions":["wedding_day","festive"],"daynight":["day"],"metal":"silver","fit":"slim","price":4690,"mrp":7040,"rating":3.9,"reviews":1224,"returnRate":0.3,"sizeOffset":-2,"stock":{"XS":0,"S":2,"M":6,"L":6,"XL":22,"XXL":0}},{"sku":"SA-010","name":"Olive cotton-linen kurta set","brand":"Saanjh Atelier","cat":"kurta_set","catLabel":"Kurta set","gender":"W","colour":"Olive","hex":"#6B7A3A","family":"green","pastel":false,"fabric":"Cotton-linen","breath":5,"stretch":0,"work":"Solid","styles":["minimal"],"occasions":["haldi","mehendi"],"daynight":[],"metal":"gold","fit":"regular","price":3280,"mrp":3280,"rating":3.7,"reviews":1290,"returnRate":0.24,"sizeOffset":1,"stock":{"XS":8,"S":14,"M":4,"L":8,"XL":18,"XXL":10}},{"sku":"SA-011","name":"Beige georgette Floral print dress","brand":"Varna","cat":"dress","catLabel":"Dress","gender":"W","colour":"Beige","hex":"#D9C5A7","family":"neutral","pastel":true,"fabric":"Georgette","breath":3,"stretch":0,"work":"Floral print","styles":["fitted","printed"],"occasions":["casual","vacation","party"],"daynight":[],"metal":"both","fit":"slim","price":2520,"mrp":3020,"rating":4.0,"reviews":286,"returnRate":0.27,"sizeOffset":0,"stock":{"XS":0,"S":6,"M":22,"L":10,"XL":18,"XXL":18}},{"sku":"SA-012","name":"Mustard Tussar silk Bandhani saree","brand":"Ritu Lane","cat":"saree","catLabel":"Saree","gender":"W","colour":"Mustard","hex":"#C9A227","family":"yellow","pastel":false,"fabric":"Tussar silk","breath":2,"stretch":0,"work":"Bandhani","styles":["printed"],"occasions":["office","wedding_night","festive"],"daynight":[],"metal":"gold","fit":"free","price":10980,"mrp":16470,"rating":4.4,"reviews":580,"returnRate":0.1,"sizeOffset":-1,"stock":{"Free":26}},{"sku":"SA-013","name":"Olive chiffon Floral print saree","brand":"Varna","cat":"saree","catLabel":"Saree","gender":"W","colour":"Olive","hex":"#6B7A3A","family":"green","pastel":false,"fabric":"Chiffon","breath":3,"stretch":0,"work":"Floral print","styles":["printed"],"occasions":["wedding_day"],"daynight":[],"metal":"gold","fit":"free","price":4140,"mrp":4140,"rating":4.2,"reviews":1307,"returnRate":0.11,"sizeOffset":0,"stock":{"Free":21}},{"sku":"SA-014","name":"Lemon cotton Gota patti kurta set","brand":"Kesar Loom","cat":"kurta_set","catLabel":"Kurta set","gender":"W","colour":"Lemon","hex":"#F3E7A0","family":"yellow","pastel":true,"fabric":"Cotton","breath":5,"stretch":0,"work":"Gota patti","styles":["embellished","relaxed"],"occasions":["haldi","festive"],"daynight":["day"],"metal":"gold","fit":"relaxed","price":2490,"mrp":2990,"rating":4.3,"reviews":204,"returnRate":0.17,"sizeOffset":0,"stock":{"XS":22,"S":8,"M":14,"L":14,"XL":10,"XXL":6}},{"sku":"SA-015","name":"Blush pink georgette Zari anarkali","brand":"Tara Threads","cat":"anarkali","catLabel":"Anarkali","gender":"W","colour":"Blush pink","hex":"#F1C6C9","family":"pink","pastel":true,"fabric":"Georgette","breath":3,"stretch":0,"work":"Zari","styles":["flared","zari"],"occasions":["wedding_night","festive"],"daynight":[],"metal":"gold","fit":"regular","price":8400,"mrp":10080,"rating":4.5,"reviews":132,"returnRate":0.25,"sizeOffset":2,"stock":{"XS":2,"S":4,"M":22,"L":6,"XL":4,"XXL":18}},{"sku":"SA-016","name":"Sage green linen Floral print top","brand":"Coastline Co.","cat":"top","catLabel":"Top","gender":"W","colour":"Sage green","hex":"#A8BFA0","family":"green","pastel":true,"fabric":"Linen","breath":5,"stretch":0,"work":"Floral print","styles":["printed","relaxed"],"occasions":["party"],"daynight":["day"],"metal":"silver","fit":"relaxed","price":1510,"mrp":2260,"rating":3.8,"reviews":799,"returnRate":0.24,"sizeOffset":3,"stock":{"XS":8,"S":14,"M":8,"L":18,"XL":8,"XXL":6}},{"sku":"SA-017","name":"Coral rayon Chikankari sharara set","brand":"Coastline Co.","cat":"sharara","catLabel":"Sharara set","gender":"W","colour":"Coral","hex":"#EF7E6E","family":"orange","pastel":false,"fabric":"Rayon","breath":3,"stretch":1,"work":"Chikankari","styles":["embroidered","flared","relaxed"],"occasions":["wedding_day"],"daynight":[],"metal":"gold","fit":"relaxed","price":4740,"mrp":7110,"rating":4.1,"reviews":1124,"returnRate":0.17,"sizeOffset":3,"stock":{"XS":8,"S":18,"M":2,"L":2,"XL":6,"XXL":22}},{"sku":"SA-018","name":"Lemon rib-knit modal Ribbed top","brand":"Saanjh Atelier","cat":"top","catLabel":"Top","gender":"W","colour":"Lemon","hex":"#F3E7A0","family":"yellow","pastel":true,"fabric":"Rib-knit modal","breath":4,"stretch":2,"work":"Ribbed","styles":["fitted","ribbed"],"occasions":["casual","office"],"daynight":["day"],"metal":"gold","fit":"slim","price":1260,"mrp":1700,"rating":4.7,"reviews":919,"returnRate":0.24,"sizeOffset":1,"stock":{"XS":18,"S":14,"M":14,"L":4,"XL":18,"XXL":0}},{"sku":"SA-019","name":"Sage green Tussar silk Jacquard nehru jacket","brand":"Mill & Mandi","cat":"nehru","catLabel":"Nehru jacket","gender":"M","colour":"Sage green","hex":"#A8BFA0","family":"green","pastel":true,"fabric":"Tussar silk","breath":2,"stretch":0,"work":"Jacquard","styles":["textured"],"occasions":["festive"],"daynight":[],"metal":"both","fit":"regular","price":4520,"mrp":5420,"rating":3.9,"reviews":623,"returnRate":0.18,"sizeOffset":1,"stock":{"S":4,"M":6,"L":10,"XL":18,"XXL":6}},{"sku":"SA-020","name":"Black art silk Gota patti lehenga","brand":"Varna","cat":"lehenga","catLabel":"Lehenga","gender":"W","colour":"Black","hex":"#1E1E22","family":"black","pastel":false,"fabric":"Art silk","breath":2,"stretch":0,"work":"Gota patti","styles":["embellished","flared"],"occasions":["festive"],"daynight":["night"],"metal":"both","fit":"regular","price":16850,"mrp":25280,"rating":4.5,"reviews":975,"returnRate":0.23,"sizeOffset":0,"stock":{"XS":8,"S":14,"M":18,"L":0,"XL":14,"XXL":10}},{"sku":"SA-021","name":"Lavender crepe Embroidered top","brand":"Kesar Loom","cat":"top","catLabel":"Top","gender":"W","colour":"Lavender","hex":"#CDBCE3","family":"purple","pastel":true,"fabric":"Crepe","breath":2,"stretch":1,"work":"Embroidered","styles":["relaxed"],"occasions":["office","casual"],"daynight":[],"metal":"silver","fit":"relaxed","price":1770,"mrp":2390,"rating":4.4,"reviews":1017,"returnRate":0.11,"sizeOffset":0,"stock":{"XS":8,"S":10,"M":14,"L":2,"XL":10,"XXL":22}},{"sku":"SA-022","name":"Teal cotton-linen Chikankari men's kurta","brand":"Coastline Co.","cat":"kurta_m","catLabel":"Men's kurta","gender":"M","colour":"Teal","hex":"#1F6F78","family":"teal","pastel":false,"fabric":"Cotton-linen","breath":5,"stretch":0,"work":"Chikankari","styles":["embroidered","relaxed"],"occasions":["festive","wedding_night","wedding_day"],"daynight":[],"metal":"silver","fit":"relaxed","price":2110,"mrp":3160,"rating":4.5,"reviews":377,"returnRate":0.17,"sizeOffset":3,"stock":{"S":6,"M":4,"L":8,"XL":8,"XXL":10}},{"sku":"SA-023","name":"Peach linen Zari border saree","brand":"Saanjh Atelier","cat":"saree","catLabel":"Saree","gender":"W","colour":"Peach","hex":"#F6C9A8","family":"orange","pastel":true,"fabric":"Linen","breath":5,"stretch":0,"work":"Zari border","styles":["zari"],"occasions":["office"],"daynight":["day"],"metal":"gold","fit":"free","price":4630,"mrp":6250,"rating":4.7,"reviews":924,"returnRate":0.14,"sizeOffset":1,"stock":{"Free":20}},{"sku":"SA-024","name":"Ivory linen co-ord set","brand":"Ritu Lane","cat":"coord","catLabel":"Co-ord set","gender":"W","colour":"Ivory","hex":"#F3EEDC","family":"white","pastel":true,"fabric":"Linen","breath":5,"stretch":0,"work":"Solid","styles":["minimal","relaxed"],"occasions":["vacation","casual","office"],"daynight":["day"],"metal":"both","fit":"relaxed","price":2890,"mrp":3470,"rating":4.5,"reviews":835,"returnRate":0.19,"sizeOffset":-1,"stock":{"XS":22,"S":4,"M":8,"L":22,"XL":14,"XXL":6}},{"sku":"SA-025","name":"Olive Chanderi Gota patti sharara set","brand":"Coastline Co.","cat":"sharara","catLabel":"Sharara set","gender":"W","colour":"Olive","hex":"#6B7A3A","family":"green","pastel":false,"fabric":"Chanderi","breath":4,"stretch":0,"work":"Gota patti","styles":["embellished","flared"],"occasions":["festive","wedding_day"],"daynight":[],"metal":"gold","fit":"regular","price":6040,"mrp":8150,"rating":4.3,"reviews":576,"returnRate":0.22,"sizeOffset":3,"stock":{"XS":4,"S":2,"M":8,"L":10,"XL":14,"XXL":4}},{"sku":"SA-026","name":"Wine linen Brocade nehru jacket","brand":"Coastline Co.","cat":"nehru","catLabel":"Nehru jacket","gender":"M","colour":"Wine","hex":"#5E1F3A","family":"purple","pastel":false,"fabric":"Linen","breath":5,"stretch":0,"work":"Brocade","styles":["textured"],"occasions":["festive"],"daynight":["night"],"metal":"gold","fit":"regular","price":4820,"mrp":6510,"rating":4.6,"reviews":1390,"returnRate":0.24,"sizeOffset":3,"stock":{"S":14,"M":4,"L":2,"XL":8,"XXL":22}},{"sku":"SA-027","name":"Coral rayon Floral print dress","brand":"Kesar Loom","cat":"dress","catLabel":"Dress","gender":"W","colour":"Coral","hex":"#EF7E6E","family":"orange","pastel":false,"fabric":"Rayon","breath":3,"stretch":1,"work":"Floral print","styles":["printed"],"occasions":["vacation","party"],"daynight":[],"metal":"gold","fit":"regular","price":1740,"mrp":1740,"rating":4.4,"reviews":902,"returnRate":0.17,"sizeOffset":0,"stock":{"XS":18,"S":8,"M":14,"L":8,"XL":22,"XXL":22}},{"sku":"SA-028","name":"Beige rib-knit modal Ribbed co-ord set","brand":"Varna","cat":"coord","catLabel":"Co-ord set","gender":"W","colour":"Beige","hex":"#D9C5A7","family":"neutral","pastel":true,"fabric":"Rib-knit modal","breath":4,"stretch":2,"work":"Ribbed","styles":["ribbed"],"occasions":["casual","vacation"],"daynight":["day"],"metal":"both","fit":"regular","price":2290,"mrp":2750,"rating":3.8,"reviews":991,"returnRate":0.2,"sizeOffset":0,"stock":{"XS":6,"S":0,"M":6,"L":2,"XL":2,"XXL":18}},{"sku":"SA-029","name":"Teal crepe Floral print dress","brand":"Ritu Lane","cat":"dress","catLabel":"Dress","gender":"W","colour":"Teal","hex":"#1F6F78","family":"teal","pastel":false,"fabric":"Crepe","breath":2,"stretch":1,"work":"Floral print","styles":["printed"],"occasions":["vacation","office"],"daynight":[],"metal":"silver","fit":"regular","price":2340,"mrp":2340,"rating":4.2,"reviews":662,"returnRate":0.23,"sizeOffset":-1,"stock":{"XS":4,"S":10,"M":14,"L":18,"XL":8,"XXL":14}},{"sku":"SA-030","name":"Navy cotton Leheriya saree","brand":"Tara Threads","cat":"saree","catLabel":"Saree","gender":"W","colour":"Navy","hex":"#1F2A4D","family":"blue","pastel":false,"fabric":"Cotton","breath":5,"stretch":0,"work":"Leheriya","styles":["printed"],"occasions":["festive","office"],"daynight":[],"metal":"silver","fit":"free","price":4490,"mrp":6740,"rating":4.5,"reviews":456,"returnRate":0.11,"sizeOffset":2,"stock":{"Free":10}},{"sku":"SA-031","name":"Black georgette Mirror work anarkali","brand":"Saanjh Atelier","cat":"anarkali","catLabel":"Anarkali","gender":"W","colour":"Black","hex":"#1E1E22","family":"black","pastel":false,"fabric":"Georgette","breath":3,"stretch":0,"work":"Mirror work","styles":["fitted","flared","mirror work"],"occasions":["wedding_night","wedding_day"],"daynight":["night"],"metal":"silver","fit":"slim","price":6220,"mrp":9330,"rating":4.8,"reviews":334,"returnRate":0.3,"sizeOffset":1,"stock":{"XS":10,"S":0,"M":10,"L":6,"XL":6,"XXL":2}},{"sku":"SA-032","name":"Powder blue georgette Gota patti anarkali","brand":"Varna","cat":"anarkali","catLabel":"Anarkali","gender":"W","colour":"Powder blue","hex":"#B7CCE5","family":"blue","pastel":true,"fabric":"Georgette","breath":3,"stretch":0,"work":"Gota patti","styles":["embellished","flared"],"occasions":["festive"],"daynight":[],"metal":"both","fit":"regular","price":4510,"mrp":4510,"rating":4.7,"reviews":323,"returnRate":0.17,"sizeOffset":0,"stock":{"XS":8,"S":4,"M":18,"L":22,"XL":14,"XXL":22}},{"sku":"SA-033","name":"Grey cotton trousers","brand":"Varna","cat":"trousers","catLabel":"Trousers","gender":"M","colour":"Grey","hex":"#8C8C94","family":"grey","pastel":false,"fabric":"Cotton","breath":5,"stretch":0,"work":"Solid","styles":["minimal","relaxed"],"occasions":["office","casual"],"daynight":[],"metal":"silver","fit":"relaxed","price":1810,"mrp":2170,"rating":4.6,"reviews":1256,"returnRate":0.13,"sizeOffset":0,"stock":{"S":18,"M":18,"L":8,"XL":14,"XXL":22}},{"sku":"SA-034","name":"Powder blue Chanderi Zari border saree","brand":"Varna","cat":"saree","catLabel":"Saree","gender":"W","colour":"Powder blue","hex":"#B7CCE5","family":"blue","pastel":true,"fabric":"Chanderi","breath":4,"stretch":0,"work":"Zari border","styles":["zari"],"occasions":["wedding_day","festive"],"daynight":["day"],"metal":"both","fit":"free","price":5600,"mrp":7560,"rating":4.1,"reviews":153,"returnRate":0.12,"sizeOffset":0,"stock":{"Free":13}},{"sku":"SA-035","name":"Olive Tussar silk Chikankari men's kurta","brand":"Varna","cat":"kurta_m","catLabel":"Men's kurta","gender":"M","colour":"Olive","hex":"#6B7A3A","family":"green","pastel":false,"fabric":"Tussar silk","breath":2,"stretch":0,"work":"Chikankari","styles":["embroidered","fitted"],"occasions":["festive"],"daynight":[],"metal":"gold","fit":"slim","price":2520,"mrp":3020,"rating":4.0,"reviews":317,"returnRate":0.23,"sizeOffset":0,"stock":{"S":2,"M":22,"L":22,"XL":6,"XXL":10}},{"sku":"SA-036","name":"Navy art silk Mirror work kurta set","brand":"Varna","cat":"kurta_set","catLabel":"Kurta set","gender":"W","colour":"Navy","hex":"#1F2A4D","family":"blue","pastel":false,"fabric":"Art silk","breath":2,"stretch":0,"work":"Mirror work","styles":["fitted","mirror work"],"occasions":["casual"],"daynight":[],"metal":"silver","fit":"slim","price":4380,"mrp":6570,"rating":4.7,"reviews":355,"returnRate":0.24,"sizeOffset":0,"stock":{"XS":0,"S":2,"M":6,"L":4,"XL":14,"XXL":18}},{"sku":"SA-037","name":"Powder blue mul-mul cotton Thread embroidery kurta set","brand":"Saanjh Atelier","cat":"kurta_set","catLabel":"Kurta set","gender":"W","colour":"Powder blue","hex":"#B7CCE5","family":"blue","pastel":true,"fabric":"Mul-mul cotton","breath":5,"stretch":0,"work":"Thread embroidery","styles":["embroidered","relaxed"],"occasions":["wedding_day","mehendi","festive"],"daynight":["day"],"metal":"silver","fit":"relaxed","price":3990,"mrp":5980,"rating":3.8,"reviews":618,"returnRate":0.15,"sizeOffset":1,"stock":{"XS":2,"S":10,"M":10,"L":8,"XL":0,"XXL":18}},{"sku":"SA-038","name":"Turmeric yellow modal Floral print top","brand":"Ritu Lane","cat":"top","catLabel":"Top","gender":"W","colour":"Turmeric yellow","hex":"#E3A82B","family":"yellow","pastel":false,"fabric":"Modal","breath":4,"stretch":1,"work":"Floral print","styles":["printed"],"occasions":["party","vacation","casual"],"daynight":[],"metal":"gold","fit":"regular","price":910,"mrp":1230,"rating":4.2,"reviews":1383,"returnRate":0.18,"sizeOffset":-1,"stock":{"XS":4,"S":2,"M":14,"L":6,"XL":18,"XXL":4}},{"sku":"SA-039","name":"Navy poly-viscose trousers","brand":"Mill & Mandi","cat":"trousers","catLabel":"Trousers","gender":"M","colour":"Navy","hex":"#1F2A4D","family":"blue","pastel":false,"fabric":"Poly-viscose","breath":2,"stretch":1,"work":"Solid","styles":["fitted","minimal"],"occasions":["office","vacation","casual"],"daynight":[],"metal":"silver","fit":"slim","price":2940,"mrp":2940,"rating":4.7,"reviews":472,"returnRate":0.3,"sizeOffset":1,"stock":{"S":4,"M":8,"L":18,"XL":22,"XXL":4}},{"sku":"SA-040","name":"Grey georgette Polka dress","brand":"Tara Threads","cat":"dress","catLabel":"Dress","gender":"W","colour":"Grey","hex":"#8C8C94","family":"grey","pastel":false,"fabric":"Georgette","breath":3,"stretch":0,"work":"Polka","styles":["printed","relaxed"],"occasions":["casual"],"daynight":[],"metal":"silver","fit":"relaxed","price":1280,"mrp":1540,"rating":4.8,"reviews":910,"returnRate":0.21,"sizeOffset":2,"stock":{"XS":8,"S":0,"M":4,"L":18,"XL":22,"XXL":18}},{"sku":"SA-041","name":"Lemon rib-knit modal Ribbed co-ord set","brand":"Coastline Co.","cat":"coord","catLabel":"Co-ord set","gender":"W","colour":"Lemon","hex":"#F3E7A0","family":"yellow","pastel":true,"fabric":"Rib-knit modal","breath":4,"stretch":2,"work":"Ribbed","styles":["fitted","ribbed"],"occasions":["vacation","office","party"],"daynight":["day"],"metal":"gold","fit":"slim","price":2530,"mrp":3040,"rating":4.0,"reviews":1209,"returnRate":0.31,"sizeOffset":3,"stock":{"XS":18,"S":18,"M":0,"L":2,"XL":8,"XXL":6}},{"sku":"SA-042","name":"Sage green rib-knit modal Ribbed co-ord set","brand":"Neel Studio","cat":"coord","catLabel":"Co-ord set","gender":"W","colour":"Sage green","hex":"#A8BFA0","family":"green","pastel":true,"fabric":"Rib-knit modal","breath":4,"stretch":2,"work":"Ribbed","styles":["fitted","ribbed"],"occasions":["casual","vacation"],"daynight":["day"],"metal":"silver","fit":"slim","price":2190,"mrp":2960,"rating":3.7,"reviews":1152,"returnRate":0.27,"sizeOffset":-2,"stock":{"XS":10,"S":18,"M":22,"L":18,"XL":2,"XXL":6}},{"sku":"SA-043","name":"Royal blue organza Mirror work sharara set","brand":"Ritu Lane","cat":"sharara","catLabel":"Sharara set","gender":"W","colour":"Royal blue","hex":"#2648A8","family":"blue","pastel":false,"fabric":"Organza","breath":3,"stretch":0,"work":"Mirror work","styles":["flared","mirror work"],"occasions":["wedding_night","festive"],"daynight":[],"metal":"silver","fit":"regular","price":6090,"mrp":6090,"rating":4.8,"reviews":770,"returnRate":0.23,"sizeOffset":-1,"stock":{"XS":0,"S":10,"M":6,"L":18,"XL":18,"XXL":6}},{"sku":"SA-044","name":"Olive georgette Bandhani saree","brand":"Ritu Lane","cat":"saree","catLabel":"Saree","gender":"W","colour":"Olive","hex":"#6B7A3A","family":"green","pastel":false,"fabric":"Georgette","breath":3,"stretch":0,"work":"Bandhani","styles":["printed"],"occasions":["wedding_night","festive","wedding_day"],"daynight":[],"metal":"gold","fit":"free","price":9970,"mrp":13460,"rating":3.8,"reviews":499,"returnRate":0.13,"sizeOffset":-1,"stock":{"Free":22}},{"sku":"SA-045","name":"White cotton Chikankari kurta set","brand":"Saanjh Atelier","cat":"kurta_set","catLabel":"Kurta set","gender":"W","colour":"White","hex":"#FAFAF7","family":"white","pastel":false,"fabric":"Cotton","breath":5,"stretch":0,"work":"Chikankari","styles":["embroidered"],"occasions":["haldi","mehendi"],"daynight":[],"metal":"silver","fit":"regular","price":2790,"mrp":2790,"rating":4.4,"reviews":1153,"returnRate":0.22,"sizeOffset":1,"stock":{"XS":6,"S":10,"M":8,"L":4,"XL":18,"XXL":22}},{"sku":"SA-046","name":"Sky blue cotton Stripes shirt","brand":"Varna","cat":"shirt","catLabel":"Shirt","gender":"M","colour":"Sky blue","hex":"#7FB3E0","family":"blue","pastel":true,"fabric":"Cotton","breath":5,"stretch":0,"work":"Stripes","styles":["printed","relaxed"],"occasions":["party","casual"],"daynight":["day"],"metal":"silver","fit":"relaxed","price":1250,"mrp":1250,"rating":4.6,"reviews":1351,"returnRate":0.09,"sizeOffset":0,"stock":{"S":22,"M":8,"L":18,"XL":22,"XXL":14}},{"sku":"SA-047","name":"Navy cotton stretch shirt","brand":"Coastline Co.","cat":"shirt","catLabel":"Shirt","gender":"M","colour":"Navy","hex":"#1F2A4D","family":"blue","pastel":false,"fabric":"Cotton stretch","breath":4,"stretch":1,"work":"Solid","styles":["minimal"],"occasions":["office","party"],"daynight":[],"metal":"silver","fit":"regular","price":2490,"mrp":3740,"rating":4.2,"reviews":128,"returnRate":0.24,"sizeOffset":3,"stock":{"S":14,"M":6,"L":2,"XL":2,"XXL":14}},{"sku":"SA-048","name":"Olive georgette Bandhani kurta set","brand":"Kesar Loom","cat":"kurta_set","catLabel":"Kurta set","gender":"W","colour":"Olive","hex":"#6B7A3A","family":"green","pastel":false,"fabric":"Georgette","breath":3,"stretch":0,"work":"Bandhani","styles":["printed"],"occasions":["mehendi","wedding_day","haldi"],"daynight":[],"metal":"gold","fit":"regular","price":2070,"mrp":2480,"rating":4.7,"reviews":172,"returnRate":0.16,"sizeOffset":0,"stock":{"XS":6,"S":22,"M":18,"L":4,"XL":14,"XXL":4}},{"sku":"SA-049","name":"Wine linen Block print men's kurta","brand":"Coastline Co.","cat":"kurta_m","catLabel":"Men's kurta","gender":"M","colour":"Wine","hex":"#5E1F3A","family":"purple","pastel":false,"fabric":"Linen","breath":5,"stretch":0,"work":"Block print","styles":["printed"],"occasions":["wedding_night","haldi","festive"],"daynight":["night"],"metal":"gold","fit":"regular","price":3540,"mrp":4250,"rating":4.3,"reviews":838,"returnRate":0.22,"sizeOffset":3,"stock":{"S":8,"M":8,"L":10,"XL":10,"XXL":0}},{"sku":"SA-050","name":"Lavender cotton Smocked dress","brand":"Ritu Lane","cat":"dress","catLabel":"Dress","gender":"W","colour":"Lavender","hex":"#CDBCE3","family":"purple","pastel":true,"fabric":"Cotton","breath":5,"stretch":0,"work":"Smocked","styles":["relaxed","textured"],"occasions":["casual","office","vacation"],"daynight":["day"],"metal":"silver","fit":"relaxed","price":1430,"mrp":1720,"rating":4.6,"reviews":797,"returnRate":0.16,"sizeOffset":-1,"stock":{"XS":8,"S":2,"M":6,"L":2,"XL":22,"XXL":14}},{"sku":"SA-051","name":"Beige crepe Block print co-ord set","brand":"Varna","cat":"coord","catLabel":"Co-ord set","gender":"W","colour":"Beige","hex":"#D9C5A7","family":"neutral","pastel":true,"fabric":"Crepe","breath":2,"stretch":1,"work":"Block print","styles":["printed"],"occasions":["casual","party"],"daynight":[],"metal":"both","fit":"regular","price":2860,"mrp":2860,"rating":4.8,"reviews":1151,"returnRate":0.14,"sizeOffset":0,"stock":{"XS":6,"S":10,"M":4,"L":8,"XL":0,"XXL":22}},{"sku":"SA-052","name":"Sage green crepe Smocked dress","brand":"Coastline Co.","cat":"dress","catLabel":"Dress","gender":"W","colour":"Sage green","hex":"#A8BFA0","family":"green","pastel":true,"fabric":"Crepe","breath":2,"stretch":1,"work":"Smocked","styles":["fitted","textured"],"occasions":["casual","office"],"daynight":[],"metal":"silver","fit":"slim","price":3150,"mrp":3780,"rating":4.4,"reviews":562,"returnRate":0.31,"sizeOffset":3,"stock":{"XS":8,"S":18,"M":2,"L":6,"XL":8,"XXL":6}},{"sku":"SA-053","name":"Turmeric yellow rayon Block print kurta set","brand":"Neel Studio","cat":"kurta_set","catLabel":"Kurta set","gender":"W","colour":"Turmeric yellow","hex":"#E3A82B","family":"yellow","pastel":false,"fabric":"Rayon","breath":3,"stretch":1,"work":"Block print","styles":["printed"],"occasions":["haldi","casual"],"daynight":[],"metal":"gold","fit":"regular","price":1990,"mrp":2390,"rating":4.1,"reviews":348,"returnRate":0.23,"sizeOffset":-2,"stock":{"XS":22,"S":4,"M":22,"L":2,"XL":8,"XXL":22}},{"sku":"SA-054","name":"Sky blue cotton-linen shirt","brand":"Mill & Mandi","cat":"shirt","catLabel":"Shirt","gender":"M","colour":"Sky blue","hex":"#7FB3E0","family":"blue","pastel":true,"fabric":"Cotton-linen","breath":5,"stretch":0,"work":"Solid","styles":["minimal"],"occasions":["office","vacation"],"daynight":["day"],"metal":"silver","fit":"regular","price":2190,"mrp":3280,"rating":4.0,"reviews":986,"returnRate":0.2,"sizeOffset":1,"stock":{"S":22,"M":6,"L":8,"XL":18,"XXL":6}},{"sku":"SA-055","name":"Maroon cotton-linen shirt","brand":"Mill & Mandi","cat":"shirt","catLabel":"Shirt","gender":"M","colour":"Maroon","hex":"#7A1F2B","family":"red","pastel":false,"fabric":"Cotton-linen","breath":5,"stretch":0,"work":"Solid","styles":["minimal"],"occasions":["office","party","casual"],"daynight":["night"],"metal":"gold","fit":"regular","price":2300,"mrp":3450,"rating":4.5,"reviews":926,"returnRate":0.22,"sizeOffset":1,"stock":{"S":0,"M":0,"L":18,"XL":14,"XXL":14}},{"sku":"SA-056","name":"Ivory Chanderi Thread embroidery anarkali","brand":"Ritu Lane","cat":"anarkali","catLabel":"Anarkali","gender":"W","colour":"Ivory","hex":"#F3EEDC","family":"white","pastel":true,"fabric":"Chanderi","breath":4,"stretch":0,"work":"Thread embroidery","styles":["embroidered","fitted","flared"],"occasions":["festive","wedding_night","wedding_day"],"daynight":["day"],"metal":"both","fit":"slim","price":2940,"mrp":4410,"rating":4.1,"reviews":484,"returnRate":0.28,"sizeOffset":-1,"stock":{"XS":4,"S":2,"M":14,"L":0,"XL":18,"XXL":6}},{"sku":"SA-057","name":"Powder blue cotton shirt","brand":"Coastline Co.","cat":"shirt","catLabel":"Shirt","gender":"M","colour":"Powder blue","hex":"#B7CCE5","family":"blue","pastel":true,"fabric":"Cotton","breath":5,"stretch":0,"work":"Solid","styles":["fitted","minimal"],"occasions":["party"],"daynight":["day"],"metal":"silver","fit":"slim","price":1310,"mrp":1960,"rating":4.1,"reviews":1380,"returnRate":0.34,"sizeOffset":3,"stock":{"S":22,"M":0,"L":22,"XL":22,"XXL":10}},{"sku":"SA-058","name":"Olive linen Thread embroidery men's kurta","brand":"Varna","cat":"kurta_m","catLabel":"Men's kurta","gender":"M","colour":"Olive","hex":"#6B7A3A","family":"green","pastel":false,"fabric":"Linen","breath":5,"stretch":0,"work":"Thread embroidery","styles":["embroidered","relaxed"],"occasions":["festive","wedding_day","casual"],"daynight":[],"metal":"gold","fit":"relaxed","price":4100,"mrp":6150,"rating":4.4,"reviews":580,"returnRate":0.09,"sizeOffset":0,"stock":{"S":18,"M":10,"L":10,"XL":4,"XXL":18}},{"sku":"SA-059","name":"Lavender Chanderi Gota patti sharara set","brand":"Ritu Lane","cat":"sharara","catLabel":"Sharara set","gender":"W","colour":"Lavender","hex":"#CDBCE3","family":"purple","pastel":true,"fabric":"Chanderi","breath":4,"stretch":0,"work":"Gota patti","styles":["embellished","flared","relaxed"],"occasions":["wedding_day","mehendi","festive"],"daynight":["day"],"metal":"both","fit":"relaxed","price":5790,"mrp":6950,"rating":4.7,"reviews":796,"returnRate":0.19,"sizeOffset":-1,"stock":{"XS":10,"S":6,"M":2,"L":0,"XL":6,"XXL":8}},{"sku":"SA-060","name":"Sky blue cotton-linen Oxford shirt","brand":"Varna","cat":"shirt","catLabel":"Shirt","gender":"M","colour":"Sky blue","hex":"#7FB3E0","family":"blue","pastel":true,"fabric":"Cotton-linen","breath":5,"stretch":0,"work":"Oxford","styles":["fitted","minimal"],"occasions":["party"],"daynight":["day"],"metal":"silver","fit":"slim","price":3040,"mrp":3650,"rating":3.8,"reviews":70,"returnRate":0.22,"sizeOffset":0,"stock":{"S":0,"M":8,"L":4,"XL":4,"XXL":22}},{"sku":"SA-061","name":"Turmeric yellow modal dress","brand":"Coastline Co.","cat":"dress","catLabel":"Dress","gender":"W","colour":"Turmeric yellow","hex":"#E3A82B","family":"yellow","pastel":false,"fabric":"Modal","breath":4,"stretch":1,"work":"Solid","styles":["minimal","relaxed"],"occasions":["casual","office"],"daynight":[],"metal":"gold","fit":"relaxed","price":4060,"mrp":5480,"rating":4.7,"reviews":996,"returnRate":0.24,"sizeOffset":3,"stock":{"XS":8,"S":18,"M":18,"L":18,"XL":10,"XXL":4}},{"sku":"SA-062","name":"Marigold cotton Mirror work sharara set","brand":"Varna","cat":"sharara","catLabel":"Sharara set","gender":"W","colour":"Marigold","hex":"#F08A24","family":"orange","pastel":false,"fabric":"Cotton","breath":5,"stretch":0,"work":"Mirror work","styles":["flared","mirror work","relaxed"],"occasions":["haldi","mehendi"],"daynight":[],"metal":"both","fit":"relaxed","price":2950,"mrp":3540,"rating":4.2,"reviews":557,"returnRate":0.11,"sizeOffset":0,"stock":{"XS":0,"S":2,"M":22,"L":8,"XL":10,"XXL":2}},{"sku":"SA-063","name":"Blush pink velvet Sequin lehenga","brand":"Tara Threads","cat":"lehenga","catLabel":"Lehenga","gender":"W","colour":"Blush pink","hex":"#F1C6C9","family":"pink","pastel":true,"fabric":"Velvet","breath":1,"stretch":0,"work":"Sequin","styles":["embellished","fitted","flared"],"occasions":["wedding_night","festive"],"daynight":["night"],"metal":"gold","fit":"slim","price":15760,"mrp":23640,"rating":4.6,"reviews":876,"returnRate":0.32,"sizeOffset":2,"stock":{"XS":14,"S":0,"M":14,"L":18,"XL":0,"XXL":10}},{"sku":"SA-064","name":"Rust linen Floral print top","brand":"Varna","cat":"top","catLabel":"Top","gender":"W","colour":"Rust","hex":"#B4532A","family":"orange","pastel":false,"fabric":"Linen","breath":5,"stretch":0,"work":"Floral print","styles":["fitted","printed"],"occasions":["vacation"],"daynight":[],"metal":"gold","fit":"slim","price":1450,"mrp":2180,"rating":4.2,"reviews":677,"returnRate":0.23,"sizeOffset":0,"stock":{"XS":8,"S":18,"M":4,"L":18,"XL":22,"XXL":18}},{"sku":"SA-065","name":"Turmeric yellow crepe Smocked dress","brand":"Kesar Loom","cat":"dress","catLabel":"Dress","gender":"W","colour":"Turmeric yellow","hex":"#E3A82B","family":"yellow","pastel":false,"fabric":"Crepe","breath":2,"stretch":1,"work":"Smocked","styles":["fitted","textured"],"occasions":["party","vacation","casual"],"daynight":[],"metal":"gold","fit":"slim","price":1290,"mrp":1290,"rating":4.2,"reviews":258,"returnRate":0.29,"sizeOffset":0,"stock":{"XS":22,"S":0,"M":22,"L":14,"XL":2,"XXL":6}},{"sku":"SA-066","name":"Emerald cotton Gota patti kurta set","brand":"Tara Threads","cat":"kurta_set","catLabel":"Kurta set","gender":"W","colour":"Emerald","hex":"#1F7A55","family":"green","pastel":false,"fabric":"Cotton","breath":5,"stretch":0,"work":"Gota patti","styles":["embellished","fitted"],"occasions":["mehendi","festive"],"daynight":[],"metal":"gold","fit":"slim","price":6140,"mrp":6140,"rating":4.5,"reviews":135,"returnRate":0.34,"sizeOffset":2,"stock":{"XS":22,"S":18,"M":4,"L":6,"XL":8,"XXL":6}},{"sku":"SA-067","name":"Beige velvet Thread embroidery lehenga","brand":"Varna","cat":"lehenga","catLabel":"Lehenga","gender":"W","colour":"Beige","hex":"#D9C5A7","family":"neutral","pastel":true,"fabric":"Velvet","breath":1,"stretch":0,"work":"Thread embroidery","styles":["embroidered","fitted","flared"],"occasions":["wedding_night"],"daynight":["night"],"metal":"both","fit":"slim","price":7460,"mrp":8950,"rating":4.0,"reviews":987,"returnRate":0.32,"sizeOffset":0,"stock":{"XS":6,"S":2,"M":0,"L":0,"XL":6,"XXL":6}},{"sku":"SA-068","name":"Navy cotton Stripes shirt","brand":"Varna","cat":"shirt","catLabel":"Shirt","gender":"M","colour":"Navy","hex":"#1F2A4D","family":"blue","pastel":false,"fabric":"Cotton","breath":5,"stretch":0,"work":"Stripes","styles":["printed"],"occasions":["casual"],"daynight":[],"metal":"silver","fit":"regular","price":2500,"mrp":3750,"rating":4.2,"reviews":759,"returnRate":0.2,"sizeOffset":0,"stock":{"S":0,"M":4,"L":14,"XL":22,"XXL":2}},{"sku":"SA-069","name":"Black Tussar silk men's kurta","brand":"Indigo Yard","cat":"kurta_m","catLabel":"Men's kurta","gender":"M","colour":"Black","hex":"#1E1E22","family":"black","pastel":false,"fabric":"Tussar silk","breath":2,"stretch":0,"work":"Solid","styles":["fitted","minimal"],"occasions":["festive","mehendi"],"daynight":["night"],"metal":"silver","fit":"slim","price":3510,"mrp":4740,"rating":3.8,"reviews":588,"returnRate":0.28,"sizeOffset":-2,"stock":{"S":6,"M":4,"L":18,"XL":6,"XXL":2}},{"sku":"SA-070","name":"White cotton stretch Oxford shirt","brand":"Indigo Yard","cat":"shirt","catLabel":"Shirt","gender":"M","colour":"White","hex":"#FAFAF7","family":"white","pastel":false,"fabric":"Cotton stretch","breath":4,"stretch":1,"work":"Oxford","styles":["fitted","minimal"],"occasions":["office","casual"],"daynight":[],"metal":"silver","fit":"slim","price":1890,"mrp":1890,"rating":4.6,"reviews":163,"returnRate":0.27,"sizeOffset":-2,"stock":{"S":6,"M":6,"L":0,"XL":2,"XXL":0}},{"sku":"SA-071","name":"Mint Chanderi Gota patti lehenga","brand":"Kesar Loom","cat":"lehenga","catLabel":"Lehenga","gender":"W","colour":"Mint","hex":"#BFE3D0","family":"green","pastel":true,"fabric":"Chanderi","breath":4,"stretch":0,"work":"Gota patti","styles":["embellished","flared"],"occasions":["wedding_night","festive","wedding_day"],"daynight":["day"],"metal":"both","fit":"regular","price":22310,"mrp":30120,"rating":4.1,"reviews":794,"returnRate":0.19,"sizeOffset":0,"stock":{"XS":18,"S":4,"M":0,"L":8,"XL":14,"XXL":10}},{"sku":"SA-072","name":"Beige rib-knit modal Ribbed co-ord set","brand":"Coastline Co.","cat":"coord","catLabel":"Co-ord set","gender":"W","colour":"Beige","hex":"#D9C5A7","family":"neutral","pastel":true,"fabric":"Rib-knit modal","breath":4,"stretch":2,"work":"Ribbed","styles":["relaxed","ribbed"],"occasions":["casual","vacation"],"daynight":["day"],"metal":"both","fit":"relaxed","price":2390,"mrp":3230,"rating":4.7,"reviews":647,"returnRate":0.17,"sizeOffset":3,"stock":{"XS":22,"S":22,"M":0,"L":10,"XL":18,"XXL":0}},{"sku":"SA-073","name":"White poly-viscose Pleated trousers","brand":"Varna","cat":"trousers","catLabel":"Trousers","gender":"M","colour":"White","hex":"#FAFAF7","family":"white","pastel":false,"fabric":"Poly-viscose","breath":2,"stretch":1,"work":"Pleated","styles":["fitted","tailored"],"occasions":["casual","office"],"daynight":[],"metal":"silver","fit":"slim","price":2710,"mrp":4060,"rating":3.8,"reviews":608,"returnRate":0.28,"sizeOffset":0,"stock":{"S":0,"M":8,"L":6,"XL":4,"XXL":22}},{"sku":"SA-074","name":"Olive georgette Gota patti lehenga","brand":"Neel Studio","cat":"lehenga","catLabel":"Lehenga","gender":"W","colour":"Olive","hex":"#6B7A3A","family":"green","pastel":false,"fabric":"Georgette","breath":3,"stretch":0,"work":"Gota patti","styles":["embellished","flared"],"occasions":["mehendi","wedding_night"],"daynight":[],"metal":"gold","fit":"regular","price":14360,"mrp":17230,"rating":3.8,"reviews":1302,"returnRate":0.26,"sizeOffset":-2,"stock":{"XS":4,"S":8,"M":2,"L":0,"XL":8,"XXL":14}},{"sku":"SA-075","name":"Wine cotton Chikankari men's kurta","brand":"Coastline Co.","cat":"kurta_m","catLabel":"Men's kurta","gender":"M","colour":"Wine","hex":"#5E1F3A","family":"purple","pastel":false,"fabric":"Cotton","breath":5,"stretch":0,"work":"Chikankari","styles":["embroidered","relaxed"],"occasions":["festive","wedding_night"],"daynight":["night"],"metal":"gold","fit":"relaxed","price":2440,"mrp":2440,"rating":4.2,"reviews":1188,"returnRate":0.2,"sizeOffset":3,"stock":{"S":8,"M":2,"L":2,"XL":22,"XXL":14}},{"sku":"SA-076","name":"Black poly-viscose trousers","brand":"Coastline Co.","cat":"trousers","catLabel":"Trousers","gender":"M","colour":"Black","hex":"#1E1E22","family":"black","pastel":false,"fabric":"Poly-viscose","breath":2,"stretch":1,"work":"Solid","styles":["fitted","minimal"],"occasions":["vacation","casual","office"],"daynight":["night"],"metal":"silver","fit":"slim","price":1670,"mrp":2250,"rating":4.2,"reviews":1277,"returnRate":0.34,"sizeOffset":3,"stock":{"S":18,"M":22,"L":0,"XL":22,"XXL":6}},{"sku":"SA-077","name":"Navy cotton-linen men's kurta","brand":"Coastline Co.","cat":"kurta_m","catLabel":"Men's kurta","gender":"M","colour":"Navy","hex":"#1F2A4D","family":"blue","pastel":false,"fabric":"Cotton-linen","breath":5,"stretch":0,"work":"Solid","styles":["minimal","relaxed"],"occasions":["casual","wedding_night","mehendi"],"daynight":[],"metal":"silver","fit":"relaxed","price":2300,"mrp":3100,"rating":4.4,"reviews":1232,"returnRate":0.19,"sizeOffset":3,"stock":{"S":8,"M":6,"L":22,"XL":2,"XXL":10}},{"sku":"SA-078","name":"Olive cotton Floral print anarkali","brand":"Tara Threads","cat":"anarkali","catLabel":"Anarkali","gender":"W","colour":"Olive","hex":"#6B7A3A","family":"green","pastel":false,"fabric":"Cotton","breath":5,"stretch":0,"work":"Floral print","styles":["fitted","flared","printed"],"occasions":["festive"],"daynight":[],"metal":"gold","fit":"slim","price":6900,"mrp":10350,"rating":4.4,"reviews":374,"returnRate":0.31,"sizeOffset":2,"stock":{"XS":14,"S":10,"M":14,"L":8,"XL":22,"XXL":4}},{"sku":"SA-079","name":"Ivory rayon Block print co-ord set","brand":"Saanjh Atelier","cat":"coord","catLabel":"Co-ord set","gender":"W","colour":"Ivory","hex":"#F3EEDC","family":"white","pastel":true,"fabric":"Rayon","breath":3,"stretch":1,"work":"Block print","styles":["printed"],"occasions":["casual","vacation"],"daynight":[],"metal":"both","fit":"regular","price":3260,"mrp":4400,"rating":4.3,"reviews":1076,"returnRate":0.18,"sizeOffset":1,"stock":{"XS":4,"S":18,"M":6,"L":10,"XL":8,"XXL":10}},{"sku":"SA-080","name":"Mustard linen men's kurta","brand":"Coastline Co.","cat":"kurta_m","catLabel":"Men's kurta","gender":"M","colour":"Mustard","hex":"#C9A227","family":"yellow","pastel":false,"fabric":"Linen","breath":5,"stretch":0,"work":"Solid","styles":["minimal","relaxed"],"occasions":["casual"],"daynight":[],"metal":"gold","fit":"relaxed","price":4050,"mrp":4050,"rating":4.7,"reviews":336,"returnRate":0.22,"sizeOffset":3,"stock":{"S":18,"M":10,"L":4,"XL":10,"XXL":8}},{"sku":"SA-081","name":"Mint cotton Thread embroidery anarkali","brand":"Kesar Loom","cat":"anarkali","catLabel":"Anarkali","gender":"W","colour":"Mint","hex":"#BFE3D0","family":"green","pastel":true,"fabric":"Cotton","breath":5,"stretch":0,"work":"Thread embroidery","styles":["embroidered","flared"],"occasions":["wedding_day","festive"],"daynight":["day"],"metal":"silver","fit":"regular","price":5450,"mrp":7360,"rating":4.5,"reviews":1345,"returnRate":0.19,"sizeOffset":0,"stock":{"XS":8,"S":18,"M":10,"L":4,"XL":10,"XXL":10}},{"sku":"SA-082","name":"Teal rayon Smocked dress","brand":"Coastline Co.","cat":"dress","catLabel":"Dress","gender":"W","colour":"Teal","hex":"#1F6F78","family":"teal","pastel":false,"fabric":"Rayon","breath":3,"stretch":1,"work":"Smocked","styles":["fitted","textured"],"occasions":["vacation","party","office"],"daynight":[],"metal":"silver","fit":"slim","price":2150,"mrp":2580,"rating":4.7,"reviews":583,"returnRate":0.36,"sizeOffset":3,"stock":{"XS":6,"S":18,"M":22,"L":4,"XL":14,"XXL":6}},{"sku":"SA-083","name":"Rani pink rayon Block print co-ord set","brand":"Saanjh Atelier","cat":"coord","catLabel":"Co-ord set","gender":"W","colour":"Rani pink","hex":"#C2185B","family":"pink","pastel":false,"fabric":"Rayon","breath":3,"stretch":1,"work":"Block print","styles":["printed"],"occasions":["office","vacation","party"],"daynight":[],"metal":"gold","fit":"regular","price":2350,"mrp":2820,"rating":3.9,"reviews":1009,"returnRate":0.17,"sizeOffset":1,"stock":{"XS":8,"S":8,"M":6,"L":2,"XL":6,"XXL":10}},{"sku":"SA-084","name":"Sage green Chanderi Chikankari kurta set","brand":"Tara Threads","cat":"kurta_set","catLabel":"Kurta set","gender":"W","colour":"Sage green","hex":"#A8BFA0","family":"green","pastel":true,"fabric":"Chanderi","breath":4,"stretch":0,"work":"Chikankari","styles":["embroidered"],"occasions":["wedding_day","festive"],"daynight":["day"],"metal":"silver","fit":"regular","price":5150,"mrp":6950,"rating":3.8,"reviews":796,"returnRate":0.19,"sizeOffset":2,"stock":{"XS":8,"S":0,"M":4,"L":14,"XL":10,"XXL":8}},{"sku":"SA-085","name":"Lavender rayon Chikankari sharara set","brand":"Coastline Co.","cat":"sharara","catLabel":"Sharara set","gender":"W","colour":"Lavender","hex":"#CDBCE3","family":"purple","pastel":true,"fabric":"Rayon","breath":3,"stretch":1,"work":"Chikankari","styles":["embroidered","flared"],"occasions":["wedding_night","festive"],"daynight":[],"metal":"silver","fit":"regular","price":6610,"mrp":7930,"rating":4.4,"reviews":1319,"returnRate":0.29,"sizeOffset":3,"stock":{"XS":2,"S":6,"M":18,"L":0,"XL":22,"XXL":10}},{"sku":"SA-086","name":"Black Khadi men's kurta","brand":"Mill & Mandi","cat":"kurta_m","catLabel":"Men's kurta","gender":"M","colour":"Black","hex":"#1E1E22","family":"black","pastel":false,"fabric":"Khadi","breath":5,"stretch":0,"work":"Solid","styles":["minimal","relaxed"],"occasions":["wedding_day","mehendi"],"daynight":["night"],"metal":"silver","fit":"relaxed","price":1370,"mrp":2060,"rating":4.3,"reviews":828,"returnRate":0.14,"sizeOffset":1,"stock":{"S":10,"M":2,"L":14,"XL":2,"XXL":6}},{"sku":"SA-087","name":"Black cotton top","brand":"Neel Studio","cat":"top","catLabel":"Top","gender":"W","colour":"Black","hex":"#1E1E22","family":"black","pastel":false,"fabric":"Cotton","breath":5,"stretch":0,"work":"Solid","styles":["minimal"],"occasions":["office","vacation"],"daynight":["night"],"metal":"silver","fit":"regular","price":1640,"mrp":1640,"rating":4.1,"reviews":132,"returnRate":0.26,"sizeOffset":-2,"stock":{"XS":14,"S":2,"M":2,"L":18,"XL":4,"XXL":8}},{"sku":"SA-088","name":"Coral Chanderi Chikankari sharara set","brand":"Varna","cat":"sharara","catLabel":"Sharara set","gender":"W","colour":"Coral","hex":"#EF7E6E","family":"orange","pastel":false,"fabric":"Chanderi","breath":4,"stretch":0,"work":"Chikankari","styles":["embroidered","flared"],"occasions":["haldi","wedding_day"],"daynight":[],"metal":"gold","fit":"regular","price":7680,"mrp":11520,"rating":3.7,"reviews":1116,"returnRate":0.14,"sizeOffset":0,"stock":{"XS":2,"S":4,"M":6,"L":14,"XL":22,"XXL":10}},{"sku":"SA-089","name":"Powder blue Tussar silk nehru jacket","brand":"Indigo Yard","cat":"nehru","catLabel":"Nehru jacket","gender":"M","colour":"Powder blue","hex":"#B7CCE5","family":"blue","pastel":true,"fabric":"Tussar silk","breath":2,"stretch":0,"work":"Solid","styles":["minimal"],"occasions":["festive","wedding_day"],"daynight":[],"metal":"silver","fit":"regular","price":3980,"mrp":5970,"rating":4.0,"reviews":1362,"returnRate":0.23,"sizeOffset":-2,"stock":{"S":0,"M":10,"L":2,"XL":10,"XXL":2}},{"sku":"SA-090","name":"Sage green organza Thread embroidery lehenga","brand":"Saanjh Atelier","cat":"lehenga","catLabel":"Lehenga","gender":"W","colour":"Sage green","hex":"#A8BFA0","family":"green","pastel":true,"fabric":"Organza","breath":3,"stretch":0,"work":"Thread embroidery","styles":["embroidered","flared"],"occasions":["wedding_day","mehendi"],"daynight":[],"metal":"silver","fit":"regular","price":14500,"mrp":17400,"rating":4.0,"reviews":1167,"returnRate":0.21,"sizeOffset":1,"stock":{"XS":6,"S":10,"M":6,"L":18,"XL":14,"XXL":18}},{"sku":"SA-091","name":"Royal blue cotton Stripes co-ord set","brand":"Coastline Co.","cat":"coord","catLabel":"Co-ord set","gender":"W","colour":"Royal blue","hex":"#2648A8","family":"blue","pastel":false,"fabric":"Cotton","breath":5,"stretch":0,"work":"Stripes","styles":["fitted","printed"],"occasions":["office"],"daynight":[],"metal":"silver","fit":"slim","price":1820,"mrp":1820,"rating":4.0,"reviews":941,"returnRate":0.35,"sizeOffset":3,"stock":{"XS":22,"S":18,"M":18,"L":14,"XL":8,"XXL":10}},{"sku":"SA-092","name":"White cotton Leheriya sharara set","brand":"Tara Threads","cat":"sharara","catLabel":"Sharara set","gender":"W","colour":"White","hex":"#FAFAF7","family":"white","pastel":false,"fabric":"Cotton","breath":5,"stretch":0,"work":"Leheriya","styles":["flared","printed"],"occasions":["wedding_day","festive"],"daynight":[],"metal":"silver","fit":"regular","price":7950,"mrp":9540,"rating":4.4,"reviews":1368,"returnRate":0.2,"sizeOffset":2,"stock":{"XS":0,"S":0,"M":18,"L":8,"XL":6,"XXL":10}},{"sku":"SA-093","name":"Turmeric yellow mul-mul cotton Bandhani kurta set","brand":"Ritu Lane","cat":"kurta_set","catLabel":"Kurta set","gender":"W","colour":"Turmeric yellow","hex":"#E3A82B","family":"yellow","pastel":false,"fabric":"Mul-mul cotton","breath":5,"stretch":0,"work":"Bandhani","styles":["printed"],"occasions":["haldi","mehendi","festive"],"daynight":[],"metal":"gold","fit":"regular","price":2790,"mrp":4180,"rating":4.3,"reviews":1151,"returnRate":0.19,"sizeOffset":-1,"stock":{"XS":0,"S":2,"M":4,"L":4,"XL":14,"XXL":2}},{"sku":"SA-094","name":"Sky blue denim Tapered trousers","brand":"Coastline Co.","cat":"trousers","catLabel":"Trousers","gender":"M","colour":"Sky blue","hex":"#7FB3E0","family":"blue","pastel":true,"fabric":"Denim","breath":2,"stretch":1,"work":"Tapered","styles":["fitted","tailored"],"occasions":["office","casual","vacation"],"daynight":[],"metal":"silver","fit":"slim","price":2510,"mrp":3010,"rating":4.8,"reviews":1268,"returnRate":0.31,"sizeOffset":3,"stock":{"S":4,"M":4,"L":18,"XL":0,"XXL":14}},{"sku":"SA-095","name":"Navy art silk Jacquard men's kurta","brand":"Varna","cat":"kurta_m","catLabel":"Men's kurta","gender":"M","colour":"Navy","hex":"#1F2A4D","family":"blue","pastel":false,"fabric":"Art silk","breath":2,"stretch":0,"work":"Jacquard","styles":["fitted","textured"],"occasions":["haldi","festive","casual"],"daynight":[],"metal":"both","fit":"slim","price":3140,"mrp":4710,"rating":4.3,"reviews":1329,"returnRate":0.28,"sizeOffset":0,"stock":{"S":0,"M":14,"L":0,"XL":18,"XXL":2}},{"sku":"SA-096","name":"Powder blue cotton-linen Gota patti kurta set","brand":"Saanjh Atelier","cat":"kurta_set","catLabel":"Kurta set","gender":"W","colour":"Powder blue","hex":"#B7CCE5","family":"blue","pastel":true,"fabric":"Cotton-linen","breath":5,"stretch":0,"work":"Gota patti","styles":["embellished"],"occasions":["haldi","wedding_day","office"],"daynight":["day"],"metal":"both","fit":"regular","price":6110,"mrp":6110,"rating":4.4,"reviews":876,"returnRate":0.21,"sizeOffset":1,"stock":{"XS":2,"S":2,"M":6,"L":14,"XL":2,"XXL":6}},{"sku":"SA-097","name":"Navy crepe Tiered dress","brand":"Varna","cat":"dress","catLabel":"Dress","gender":"W","colour":"Navy","hex":"#1F2A4D","family":"blue","pastel":false,"fabric":"Crepe","breath":2,"stretch":1,"work":"Tiered","styles":["relaxed","tiered"],"occasions":["vacation","office"],"daynight":[],"metal":"silver","fit":"relaxed","price":3130,"mrp":3760,"rating":4.3,"reviews":338,"returnRate":0.09,"sizeOffset":0,"stock":{"XS":0,"S":2,"M":6,"L":6,"XL":8,"XXL":2}},{"sku":"SA-098","name":"Maroon denim Stripes shirt","brand":"Coastline Co.","cat":"shirt","catLabel":"Shirt","gender":"M","colour":"Maroon","hex":"#7A1F2B","family":"red","pastel":false,"fabric":"Denim","breath":2,"stretch":1,"work":"Stripes","styles":["printed"],"occasions":["office"],"daynight":["night"],"metal":"gold","fit":"regular","price":2050,"mrp":2460,"rating":4.6,"reviews":438,"returnRate":0.23,"sizeOffset":3,"stock":{"S":2,"M":6,"L":0,"XL":0,"XXL":10}},{"sku":"SA-099","name":"Ivory georgette Thread embroidery anarkali","brand":"Ritu Lane","cat":"anarkali","catLabel":"Anarkali","gender":"W","colour":"Ivory","hex":"#F3EEDC","family":"white","pastel":true,"fabric":"Georgette","breath":3,"stretch":0,"work":"Thread embroidery","styles":["embroidered","fitted","flared"],"occasions":["festive"],"daynight":[],"metal":"both","fit":"slim","price":4830,"mrp":6520,"rating":3.9,"reviews":561,"returnRate":0.34,"sizeOffset":-1,"stock":{"XS":22,"S":14,"M":22,"L":10,"XL":0,"XXL":2}},{"sku":"SA-100","name":"Ivory rib-knit modal Floral print co-ord set","brand":"Varna","cat":"coord","catLabel":"Co-ord set","gender":"W","colour":"Ivory","hex":"#F3EEDC","family":"white","pastel":true,"fabric":"Rib-knit modal","breath":4,"stretch":2,"work":"Floral print","styles":["printed"],"occasions":["casual"],"daynight":["day"],"metal":"both","fit":"regular","price":3310,"mrp":4960,"rating":4.6,"reviews":234,"returnRate":0.13,"sizeOffset":0,"stock":{"XS":22,"S":14,"M":10,"L":2,"XL":22,"XXL":10}}],"charts":{"W":{"XS":{"bust":80,"waist":64,"hip":88,"shoulder":35},"S":{"bust":84,"waist":68,"hip":92,"shoulder":36.5},"M":{"bust":88,"waist":72,"hip":96,"shoulder":38},"L":{"bust":94,"waist":78,"hip":102,"shoulder":39.5},"XL":{"bust":100,"waist":84,"hip":108,"shoulder":41},"XXL":{"bust":106,"waist":90,"hip":114,"shoulder":42.5}},"M":{"S":{"chest":92,"waist":78,"hip":94,"shoulder":43},"M":{"chest":98,"waist":84,"hip":100,"shoulder":44.5},"L":{"chest":104,"waist":90,"hip":106,"shoulder":46},"XL":{"chest":110,"waist":96,"hip":112,"shoulder":47.5},"XXL":{"chest":116,"waist":102,"hip":118,"shoulder":49}}},"brands":{"Kesar Loom":0,"Neel Studio":-2,"Tara Threads":2,"Ritu Lane":-1,"Saanjh Atelier":1,"Coastline Co.":3,"Varna":0,"Indigo Yard":-2,"Mill & Mandi":1}};
+/* Saathi engine: pure functions over the catalog (no DOM). */
+const ENGINE = (() => {
+  let CAT = null; // {skus, charts, brands}
+  const init = (data) => { CAT = data; };
+
+  // ---------- vocab ----------
+  const CATEGORY_WORDS = [
+    [/\b(lehenga|lehnga|ghagra|chaniya)\b/, ["lehenga"]],
+    [/\b(saree|sari|saadi)\b/, ["saree"]],
+    [/\b(anarkali)\b/, ["anarkali"]],
+    [/\b(sharara|gharara|garara)\b/, ["sharara"]],
+    [/\b(co-?ord|coord|matching set|two[- ]piece)\b/, ["coord"]],
+    [/\b(dress|maxi|midi|gown)\b/, ["dress"]],
+    [/\b(nehru|bandi|waistcoat|modi jacket)\b/, ["nehru"]],
+    [/\b(trousers?|pants|chinos|formals? pants)\b/, ["trousers"]],
+    [/\b(shirt|shirts)\b/, ["shirt"]],
+    [/\b(kurta set|kurti set|salwar|suit|churidar|palazzo set)\b/, ["kurta_set"]],
+    [/\b(kurta|kurti)\b/, ["kurta_set", "kurta_m"]],
+    [/\b(top|tee|t-shirt|blouse)\b/, ["top"]],
+  ];
+  const ETHNIC = ["kurta_set", "anarkali", "saree", "lehenga", "sharara", "kurta_m", "nehru"];
+  const WESTERN = ["coord", "dress", "top", "shirt", "trousers"];
+  const MEN_CATS = ["shirt", "kurta_m", "nehru", "trousers"];
+
+  const COLOUR_WORDS = {
+    green: /\b(green|sage|mint|olive|emerald|hara|hari|pista|pistachio)\b/,
+    blue: /\b(blue|powder blue|navy|sky|royal blue|neela|neeli|aqua|denim blue)\b/,
+    pink: /\b(pink|blush|rani|gulabi|rose|fuchsia|magenta)\b/,
+    purple: /\b(purple|lavender|lilac|wine|baingani|mauve|violet)\b/,
+    yellow: /\b(yellow|lemon|mustard|turmeric|haldi yellow|peela|peeli|pila|pili|basanti)\b/,
+    orange: /\b(orange|peach|marigold|rust|coral|narangi|kesariya|saffron)\b/,
+    red: /\b(red|maroon|laal|lal|crimson|burgundy)\b/,
+    white: /\b(white|ivory|off-white|offwhite|safed|cream|chikan white)\b/,
+    neutral: /\b(beige|nude|sand|camel|taupe|khaki|oatmeal)\b/,
+    black: /\b(black|kala|kaala|kaali|kali)\b/,
+    grey: /\b(grey|gray|charcoal|slate)\b/,
+    teal: /\b(teal|peacock|turquoise)\b/,
+  };
+  const OCCASION_WORDS = [
+    ["haldi", /\b(haldi|pithi)\b/],
+    ["mehendi", /\b(mehendi|mehndi|mendhi)\b/],
+    ["wedding_night", /\b(sangeet|reception|cocktail night|night wedding|evening wedding|shaadi ki raat|baraat)\b/],
+    ["wedding_day", /\b(wedding|shaadi|shadi|vivah|marriage|pheras?)\b/],
+    ["festive", /\b(diwali|puja|pooja|festive|festival|navratri|garba|eid|onam|pongal|karwa|rakhi|raksha)\b/],
+    ["office", /\b(office|meetings?|formal|interview|presentation|client|workwear|for work|at work)\b/],
+    ["party", /\b(party|date|dinner|club|birthday)\b/],
+    ["vacation", /\b(vacation|holiday|beach|brunch|goa|trip|travel|resort)\b/],
+    ["casual", /\b(casual|everyday|daily|college|weekend|errands)\b/],
+  ];
+  const STYLE_WORDS = [
+    ["embroidered", /\b(embroider\w*|chikan\w*|threadwork|thread work)\b/],
+    ["printed", /\b(print\w*|floral|bandhani|leheriya|ikat|block)\b/],
+    ["minimal", /\b(minimal|simple|plain|solid|subtle|understated)\b/],
+    ["mirror work", /\b(mirror)\b/],
+    ["zari", /\b(zari|banarasi)\b/],
+    ["ribbed", /\b(ribbed|rib|knit)\b/],
+    ["flared", /\b(flare\w*|twirl\w*|ghera)\b/],
+    ["embellished", /\b(gota|sequin\w*|sparkl\w*|embellish\w*|heavy)\b/],
+    ["tailored", /\b(tailored|sharp|structured|pleated)\b/],
+  ];
+  const CITIES = {
+    mumbai: { label: "Mumbai", tempC: 31, humidity: 78, note: "hot and humid" },
+    pune: { label: "Pune", tempC: 29, humidity: 55, note: "warm" },
+    delhi: { label: "Delhi", tempC: 27, humidity: 45, note: "warm days, cool evenings" },
+    gurgaon: { label: "Gurugram", tempC: 27, humidity: 45, note: "warm days, cool evenings" },
+    bengaluru: { label: "Bengaluru", tempC: 25, humidity: 65, note: "mild" },
+    bangalore: { label: "Bengaluru", tempC: 25, humidity: 65, note: "mild" },
+    chennai: { label: "Chennai", tempC: 32, humidity: 75, note: "hot and humid" },
+    kolkata: { label: "Kolkata", tempC: 31, humidity: 77, note: "hot and humid" },
+    hyderabad: { label: "Hyderabad", tempC: 29, humidity: 55, note: "warm" },
+    jaipur: { label: "Jaipur", tempC: 30, humidity: 35, note: "hot and dry" },
+    goa: { label: "Goa", tempC: 31, humidity: 79, note: "hot and humid" },
+    ahmedabad: { label: "Ahmedabad", tempC: 33, humidity: 45, note: "hot" },
+    nashik: { label: "Nashik", tempC: 28, humidity: 50, note: "warm" },
+    lucknow: { label: "Lucknow", tempC: 28, humidity: 55, note: "warm" },
+    kochi: { label: "Kochi", tempC: 30, humidity: 80, note: "hot and humid" },
+    chandigarh: { label: "Chandigarh", tempC: 26, humidity: 45, note: "warm days, cool evenings" },
+  };
+
+  // ---------- intent parsing (rule-based; the LLM refines it when available) ----------
+  function parseIntent(raw) {
+    const t = " " + String(raw || "").toLowerCase().replace(/[’']/g, "'") + " ";
+    const c = { categories: [], gender: null, colours: [], pastel: null, occasion: null, time: null,
+      budgetMax: null, budgetMin: null, metal: null, styles: [], city: null, breathable: false, size: null, fitPref: null, notes: [] };
+    // budget
+    const num = (s, k) => { let n = parseFloat(String(s).replace(/,/g, "")); if (k) n *= 1000; return Math.round(n); };
+    let m = t.match(/between\s*(?:rs\.?|₹|inr)?\s*([\d,.]+)\s*(k)?\s*(?:and|to|-)\s*(?:rs\.?|₹|inr)?\s*([\d,.]+)\s*(k)?/);
+    if (m) { c.budgetMin = num(m[1], m[2]); c.budgetMax = num(m[3], m[4]); }
+    if (!c.budgetMax) {
+      m = t.match(/(?:under|below|less than|upto|up to|within|max(?:imum)?|budget(?: of| is)?|around|not more than)\s*(?:rs\.?|₹|inr)?\s*([\d,.]+)\s*(k)?/);
+      if (m) c.budgetMax = num(m[1], m[2]);
+    }
+    if (!c.budgetMax) { m = t.match(/(?:rs\.?|₹|inr)\s*([\d,.]+)\s*(k)?\s*(?:tak|max|or less)?/); if (m) c.budgetMax = num(m[1], m[2]); }
+    if (!c.budgetMax) { m = t.match(/\b([\d,.]+)\s*(k)?\s*(?:tak|rupees|rs)\b/); if (m) c.budgetMax = num(m[1], m[2]); }
+    if (c.budgetMax && c.budgetMax < 300) c.budgetMax = null;
+    // gender
+    if (/\b(men|man|male|mens|men's|husband|boyfriend|him|groom|brother|bhai|dad|father|papa|son|beta)\b/.test(t)) c.gender = "M";
+    if (/\b(women|woman|female|womens|women's|wife|girlfriend|her|bride|sister|behen|mom|mother|maa|daughter|beti|ladies)\b/.test(t)) c.gender = c.gender === "M" ? null : "W";
+    // categories
+    for (const [re, cats] of CATEGORY_WORDS) if (re.test(t)) c.categories.push(...cats);
+    if (!c.categories.length) {
+      if (/\b(ethnic|traditional|desi|indian wear|indo-?western)\b/.test(t)) c.categories = ETHNIC.slice();
+      else if (/\b(western)\b/.test(t)) c.categories = WESTERN.slice();
+    }
+    c.categories = [...new Set(c.categories)];
+    if (c.gender === "M") c.categories = c.categories.map((x) => (x === "kurta_set" ? "kurta_m" : x)).filter((x) => MEN_CATS.includes(x));
+    if (c.gender === "W") c.categories = c.categories.filter((x) => !["kurta_m", "nehru", "trousers", "shirt"].includes(x) || x === "shirt");
+    if (!c.gender && c.categories.length && c.categories.every((x) => MEN_CATS.includes(x))) c.gender = "M";
+    if (!c.gender && c.categories.length && c.categories.every((x) => !MEN_CATS.includes(x))) c.gender = "W";
+    // colours
+    for (const [fam, re] of Object.entries(COLOUR_WORDS)) if (re.test(t)) c.colours.push(fam);
+    if (/\b(pastels?|soft|muted|powder)\b/.test(t) || /\blight (pink|blue|green|yellow|purple|peach|colou?rs?|shades?|tones?)\b/.test(t)) c.pastel = true;
+    if (/\b(bright|bold|vibrant|dark|deep|rich)\b/.test(t)) c.pastel = c.pastel ? null : false;
+    // occasion
+    for (const [occ, re] of OCCASION_WORDS) if (re.test(t)) { c.occasion = occ; break; }
+    if (/\b(day|daytime|morning|afternoon|lunch|din)\b/.test(t)) c.time = "day";
+    if (/\b(night|evening|sangeet|reception|raat)\b/.test(t)) c.time = "night";
+    if (c.occasion === "wedding_day" && c.time === "night") c.occasion = "wedding_night";
+    // metal
+    if (/\b(silver|oxidi[sz]ed|chandi)\b/.test(t)) c.metal = "silver";
+    if (/\b(gold|kundan|polki|temple jewel\w*|sone)\b/.test(t)) c.metal = c.metal ? null : "gold";
+    // style
+    for (const [st, re] of STYLE_WORDS) if (re.test(t)) c.styles.push(st);
+    // city / climate
+    for (const k of Object.keys(CITIES)) if (t.includes(" " + k)) { c.city = k; break; }
+    if (/\b(breathable|humid|humidity|sweat\w*|hot|summer|garmi|airy|light ?weight|not heavy|comfortable)\b/.test(t)) c.breathable = true;
+    // size & fit
+    m = t.match(/\bsize\s*(xxl|xl|xs|s|m|l)\b/) || t.match(/\bin (xxl|xl|xs|s|m|l)\b/);
+    if (m) c.size = m[1].toUpperCase();
+    if (/\b(loose|relaxed|roomy|comfortable fit|easy fit)\b/.test(t)) c.fitPref = "relaxed";
+    if (/\b(fitted|slim|bodycon|snug|tailored)\b/.test(t)) c.fitPref = "snug";
+    // pairing hints
+    if (/\b(goes with|pairs? (well )?with|match(es)? (my|with))\b/.test(t)) c.notes.push("pairing");
+    return c;
+  }
+
+  function mergeIntent(rule, llm) {
+    if (!llm || typeof llm !== "object") return rule;
+    const out = { ...rule };
+    const cats = Array.isArray(llm.categories) ? llm.categories.filter((x) => CAT && CAT.skus.some((s) => s.cat === x)) : [];
+    if (cats.length) out.categories = cats;
+    if (llm.gender === "M" || llm.gender === "W") out.gender = llm.gender;
+    const fams = ["green", "blue", "pink", "purple", "yellow", "orange", "red", "white", "neutral", "black", "grey", "teal"];
+    if (Array.isArray(llm.colours)) { const f = llm.colours.filter((x) => fams.includes(x)); if (f.length) out.colours = f; }
+    if (typeof llm.pastel === "boolean") out.pastel = llm.pastel;
+    const occs = ["wedding_day", "wedding_night", "haldi", "mehendi", "festive", "office", "party", "vacation", "casual"];
+    if (occs.includes(llm.occasion)) out.occasion = llm.occasion;
+    if (Number.isFinite(llm.budgetMax) && llm.budgetMax > 300) out.budgetMax = Math.round(llm.budgetMax);
+    if (Number.isFinite(llm.budgetMin) && llm.budgetMin > 0) out.budgetMin = Math.round(llm.budgetMin);
+    if (llm.metal === "silver" || llm.metal === "gold") out.metal = llm.metal;
+    const sts = ["embroidered", "printed", "minimal", "mirror work", "zari", "ribbed", "flared", "embellished", "tailored", "relaxed", "fitted", "textured", "tiered"];
+    if (Array.isArray(llm.styles)) { const s = llm.styles.filter((x) => sts.includes(x)); if (s.length) out.styles = [...new Set([...out.styles, ...s])]; }
+    if (typeof llm.city === "string" && CITIES[llm.city.toLowerCase()]) out.city = llm.city.toLowerCase();
+    if (llm.breathable === true) out.breathable = true;
+    if (llm.time === "day" || llm.time === "night") out.time = llm.time;
+    if (llm.fitPref === "snug" || llm.fitPref === "relaxed") out.fitPref = llm.fitPref;
+    return out;
+  }
+
+  const climate = (city) => (city && CITIES[city]) || null;
+
+  // ---------- colour ----------
+  function hexToRgb(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+  function rgbToLab([r, g, b]) {
+    const f = (v) => { v /= 255; return v > 0.04045 ? Math.pow((v + 0.055) / 1.055, 2.4) : v / 12.92; };
+    const R = f(r), G = f(g), B = f(b);
+    let X = (R * 0.4124 + G * 0.3576 + B * 0.1805) / 0.95047, Y = R * 0.2126 + G * 0.7152 + B * 0.0722, Z = (R * 0.0193 + G * 0.1192 + B * 0.9505) / 1.08883;
+    const p = (v) => (v > 0.008856 ? Math.cbrt(v) : 7.787 * v + 16 / 116);
+    X = p(X); Y = p(Y); Z = p(Z);
+    return [116 * Y - 16, 500 * (X - Y), 200 * (Y - Z)];
+  }
+  const deltaE = (h1, h2) => { const a = rgbToLab(hexToRgb(h1)), b = rgbToLab(hexToRgb(h2)); return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]); };
+  function nearestFamily(hex) {
+    let best = null, bd = 1e9;
+    for (const s of CAT.skus) { const d = deltaE(hex, s.hex); if (d < bd) { bd = d; best = s; } }
+    return best ? { family: best.family, colour: best.colour, pastel: best.pastel } : null;
+  }
+
+  // ---------- body & fit ----------
+  function estimateBody(p) {
+    if (!p) return null;
+    const h = +p.height || (p.gender === "M" ? 172 : 160), w = +p.weight || (p.gender === "M" ? 70 : 56);
+    const bmi = w / Math.pow(h / 100, 2);
+    let b;
+    if (p.gender === "M") {
+      b = { chest: 98 + 2.4 * (bmi - 23) + 0.15 * (h - 172), waist: 84 + 3.0 * (bmi - 23) + 0.1 * (h - 172),
+        hip: 100 + 2.0 * (bmi - 23) + 0.15 * (h - 172), shoulder: 45.5 + 0.1 * (h - 172) + 0.2 * (bmi - 23) };
+      const adj = { athletic: { shoulder: 1.2, chest: 3, waist: -3 }, lean: { chest: -2, waist: -2, shoulder: -0.5 },
+        regular: {}, broad_mid: { waist: 6, chest: 2, hip: 3 } }[p.shape] || {};
+      for (const k in adj) b[k] += adj[k];
+    } else {
+      b = { bust: 88 + 2.2 * (bmi - 21.5) + 0.15 * (h - 160), waist: 72 + 2.6 * (bmi - 21.5) + 0.1 * (h - 160),
+        hip: 96 + 2.3 * (bmi - 21.5) + 0.2 * (h - 160), shoulder: 38 + 0.12 * (h - 160) + 0.2 * (bmi - 21.5) };
+      const adj = { hourglass: { bust: 1, waist: -3, hip: 1 }, pear: { bust: -2, hip: 5, shoulder: -0.5 }, apple: { waist: 6, bust: 2 },
+        rectangle: { waist: 2, hip: -1 }, inverted: { shoulder: 2, bust: 3, hip: -3 } }[p.shape] || {};
+      for (const k in adj) b[k] += adj[k];
+    }
+    for (const k of Object.keys(b)) {
+      if (p.overrides && +p.overrides[k] > 0) b[k] = +p.overrides[k];
+      if (p.bias && p.bias[k]) b[k] += p.bias[k];
+      b[k] = Math.round(b[k] * 10) / 10;
+    }
+    return b;
+  }
+
+  const ZONES = {
+    kurta_set: ["shoulder", "bust", "waist", "hip"], anarkali: ["shoulder", "bust", "waist"], lehenga: ["bust", "waist"],
+    coord: ["shoulder", "bust", "waist", "hip"], dress: ["shoulder", "bust", "waist"], top: ["shoulder", "bust"],
+    sharara: ["shoulder", "bust", "waist"], shirt: ["shoulder", "chest", "waist"], kurta_m: ["shoulder", "chest", "waist", "hip"],
+    nehru: ["shoulder", "chest", "waist"], trousers: ["waist", "hip"], saree: [],
+  };
+  const WINDOWS = { slim: [-1, 3], regular: [0, 6], relaxed: [1, 12] };
+  const SH_WINDOWS = { slim: [-1, 1.5], regular: [-1.5, 2], relaxed: [-1.5, 3] };
+  const ZW = { shoulder: 1.2, bust: 1.2, chest: 1.2, waist: 1, hip: 0.8 };
+
+  function fitFor(sku, body, gender, pref) {
+    if (sku.fit === "free") return { size: "Free", conf: 95, zones: [], free: true, bySize: { Free: 95 }, note: "Free size. The blouse is stitched to your bust measurement." };
+    if (!body || gender !== sku.gender) return null;
+    const chart = CAT.charts[sku.gender];
+    const zones = ZONES[sku.cat] || [];
+    const shift = pref === "snug" ? -1.5 : pref === "relaxed" ? 2 : 0;
+    let best = null; const bySize = {};
+    for (const size of Object.keys(sku.stock)) {
+      const row = chart[size]; if (!row) continue;
+      let tot = 0, wsum = 0; const zr = [];
+      for (const z of zones) {
+        if (body[z] == null || row[z] == null) continue;
+        const garment = row[z] + (z === "shoulder" ? sku.sizeOffset / 2 : sku.sizeOffset);
+        const delta = Math.round((garment - body[z]) * 10) / 10;
+        let [lo, hi] = (z === "shoulder" ? SH_WINDOWS : WINDOWS)[sku.fit];
+        lo += shift - sku.stretch * (z === "shoulder" ? 0.5 : 2); hi += shift;
+        const mid = (lo + hi) / 2, half = (hi - lo) / 2;
+        let s, status;
+        if (delta < lo) { s = Math.max(0, 0.7 - 0.22 * (lo - delta)); status = "tight"; }
+        else if (delta > hi) { s = Math.max(0, 0.7 - 0.16 * (delta - hi)); status = "loose"; }
+        else { s = 1 - (Math.abs(delta - mid) / half) * 0.3; status = "good"; }
+        zr.push({ zone: z, delta, status, garment: Math.round(garment * 10) / 10, body: body[z] });
+        tot += s * ZW[z]; wsum += ZW[z];
+      }
+      const conf = Math.round((wsum ? tot / wsum : 0.6) * 100 * (1 - 0.25 * sku.returnRate));
+      bySize[size] = conf;
+      if (!best || conf > best.conf) best = { size, conf, zones: zr };
+    }
+    if (!best) return null;
+    const inStock = sku.stock[best.size] > 0;
+    let alt = null;
+    if (!inStock) {
+      const opts = Object.entries(bySize).filter(([s]) => sku.stock[s] > 0).sort((a, b) => b[1] - a[1]);
+      if (opts.length) alt = { size: opts[0][0], conf: opts[0][1] };
+    }
+    return { ...best, bySize, inStock, alt };
+  }
+
+  function zonesForSize(sku, body, size, pref) {
+    const f = fitFor({ ...sku, stock: { [size]: 1 } }, body, sku.gender, pref);
+    return f ? f : null;
+  }
+
+  // ---------- scoring ----------
+  const OCC_LABEL = { wedding_day: "day wedding", wedding_night: "evening wedding / sangeet", haldi: "haldi", mehendi: "mehendi",
+    festive: "festive", office: "office", party: "party", vacation: "vacation", casual: "everyday" };
+  const OCC_REASON = { wedding_day: "Made for a day wedding", wedding_night: "Made for an evening wedding or sangeet", haldi: "Made for a haldi", mehendi: "Made for a mehendi", festive: "Made for festive wear", office: "Office-appropriate", party: "Party-ready", vacation: "Holiday-friendly", casual: "Easy everyday wear" };
+  const inr = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
+
+  function scoreSku(s, c, ctx) {
+    const reasons = [], warn = [];
+    // hard filters
+    if (c.gender && s.gender !== c.gender) return null;
+    if (c.categories && c.categories.length && !c.categories.includes(s.cat)) return null;
+    if (c.budgetMax && s.price > c.budgetMax) return null;
+    if (c.budgetMin && s.price < c.budgetMin * 0.9) return null;
+    if (Object.values(s.stock).every((v) => v === 0)) return null;
+    let score = 0;
+    // colour
+    if (ctx.targetHex) {
+      const d = deltaE(ctx.targetHex, s.hex);
+      const cs = Math.max(0, 5 - d / 6);
+      score += cs * 1.4;
+      if (d < 12) reasons.push(`Colour is a near match to your reference (${s.colour})`);
+      else if (d < 24) reasons.push(`Close shade to your reference (${s.colour})`);
+    }
+    if (c.colours && c.colours.length) {
+      if (c.colours.includes(s.family)) { score += 3; reasons.push(`${s.colour}${s.pastel ? ", a pastel" : ""}`); }
+      else score -= 2.5;
+    }
+    if (c.pastel === true) { if (s.pastel) { score += 2; if (!c.colours.length) reasons.push(`${s.colour}, a soft pastel`); } else score -= 2; }
+    if (c.pastel === false && !s.pastel) score += 1;
+    // climate & fabric
+    const cl = ctx.climate;
+    const humid = (cl && cl.humidity >= 65) || c.breathable;
+    if (humid) {
+      score += (s.breath - 3) * 1.3;
+      if (s.breath >= 4) reasons.push(`${s.fabric} breathes well (${s.breath}/5)${cl ? ` for ${cl.label}’s ~${cl.humidity}% humidity` : ""}`);
+      if (s.breath <= 2) warn.push(`${s.fabric} runs warm${cl ? ` in ${cl.label}’s humidity` : ""}`);
+    }
+    // occasion & time
+    if (c.occasion) {
+      if (s.occasions.includes(c.occasion)) { score += 3; reasons.push(OCC_REASON[c.occasion]); }
+      else if (c.occasion.startsWith("wedding") && s.occasions.some((o) => o.startsWith("wedding") || o === "festive")) { score += 1.2; }
+      else score -= 1.5;
+    }
+    if (c.time === "day" && s.daynight.includes("night")) score -= 1;
+    if (c.time === "day" && s.daynight.includes("day")) score += 0.8;
+    if (c.time === "night" && s.daynight.includes("night")) score += 0.8;
+    // metal
+    if (c.metal) {
+      if (s.metal === c.metal || s.metal === "both") { score += 1.6; reasons.push(c.metal === "silver" ? "Cool tone that pairs with silver jewellery" : "Warm tone that pairs with gold jewellery"); }
+      else score -= 1;
+    }
+    // style
+    for (const st of c.styles || []) if (s.styles.includes(st)) { score += 1.2; reasons.push(`${st[0].toUpperCase() + st.slice(1)}: ${s.work.toLowerCase()}`); }
+    if (ctx.refStyles) for (const st of ctx.refStyles) if (s.styles.includes(st)) score += 0.8;
+    // budget headroom
+    if (c.budgetMax) {
+      const head = c.budgetMax - s.price;
+      reasons.push(`${inr(s.price)}, ${head > 0 ? inr(head) + " under budget" : "on budget"}`);
+      score += 0.6 * (1 - s.price / c.budgetMax);
+    } else reasons.push(inr(s.price));
+    // quality signals
+    score += (s.rating - 4) * 1.2;
+    score -= s.returnRate * 4;
+    // fit
+    let fit = null;
+    if (ctx.body && ctx.profile) {
+      fit = fitFor(s, ctx.body, ctx.profile.gender, c.fitPref || ctx.profile.fitPref);
+      if (fit) {
+        score += (fit.conf - 70) / 12;
+        if (fit.free) reasons.push("Free size, low fit risk");
+        else if (fit.inStock) reasons.push(`Size ${fit.size} for you, ${fit.conf}% fit confidence`);
+        else if (fit.alt) { warn.push(`Your best size ${fit.size} is sold out; ${fit.alt.size} is ${fit.alt.conf}%`); score -= 2; }
+        else { warn.push(`Your size ${fit.size} is sold out`); score -= 4; }
+      }
+    }
+    return { sku: s, score: Math.round(score * 100) / 100, reasons, warn, fit };
+  }
+
+  const clusterKey = (s) => `${s.cat}|${s.family}|${s.pastel ? "p" : "b"}|${s.fabric}|${s.work}`;
+  const similar = (a, b) => clusterKey(a) === clusterKey(b) || (a.cat === b.cat && deltaE(a.hex, b.hex) < 8 && a.fabric === b.fabric);
+
+  function rank(c, ctx) {
+    const scored = [];
+    let filtered = 0;
+    if (!c.gender && ctx.profile && ctx.profile.gender) c = { ...c, gender: ctx.profile.gender, genderFromProfile: true };
+    if (c.gender && c.categories && c.categories.length) {
+      let cats = c.gender === "M" ? c.categories.map((x) => (x === "kurta_set" ? "kurta_m" : x)).filter((x) => MEN_CATS.includes(x)) : c.categories.filter((x) => !["kurta_m", "nehru", "trousers"].includes(x));
+      cats = [...new Set(cats)]; if (cats.length) c = { ...c, categories: cats };
+    }
+    for (const s of CAT.skus) { const r = scoreSku(s, c, ctx); if (r) scored.push(r); else filtered++; }
+    scored.sort((a, b) => b.score - a.score);
+    // collapse near-duplicates: keep best of each cluster
+    const kept = [], hidden = [];
+    for (const r of scored) {
+      const dup = kept.find((k) => similar(k.sku, r.sku));
+      if (dup) { hidden.push({ ...r, dupOf: dup.sku.sku }); dup.dups = (dup.dups || 0) + 1; } else kept.push(r);
+    }
+    const picks = [];
+    const floor = kept[0] ? Math.max(kept[0].score - 6, kept[0].score * 0.4) : 0;
+    const take = (slot, r, why) => { if (r && r.score >= floor && !picks.some((p) => p.r === r)) picks.push({ slot, why, r }); };
+    const top = kept[0];
+    if (top) {
+      take("Best match", top, "Highest score across every constraint");
+      const pool = kept.slice(1, 14);
+      const value = pool.filter((r) => r.sku.price < top.sku.price * 0.9 && r.score > top.score - 4).sort((a, b) => b.score / b.sku.price - a.score / a.sku.price)[0];
+      take("Best value", value, "Strong match for less");
+      const prem = pool.filter((r) => r.sku.price > top.sku.price * 1.1 && !picks.some((p) => p.r === r)).sort((a, b) => b.score - a.score)[0];
+      take("Premium pick", prem, "Worth the stretch");
+      const diff = pool.filter((r) => !picks.some((p) => p.r === r) && picks.every((p) => p.r.sku.cat !== r.sku.cat || p.r.sku.family !== r.sku.family))
+        .sort((a, b) => b.score - a.score)[0];
+      take("Different take", diff, "A distinct style that still fits the brief");
+      for (const r of pool) { if (picks.length >= 4) break; take("Also strong", r, "Next best distinct option"); }
+    }
+    return { picks, kept, hidden, scored, filtered, total: CAT.skus.length, c };
+  }
+
+  function clarifier(c, mode) {
+    if (mode === "reel") return c.budgetMax ? null : { key: "budget", q: "What’s your budget?", options: [["Under ₹2,000", " under 2000"], ["Under ₹3,000", " under 3000"], ["Under ₹5,000", " under 5000"], ["No limit", " "]] };
+    if (!c.budgetMax) return { key: "budget", q: "What’s your budget?", options: [["Under ₹2,000", " under 2000"], ["Under ₹4,000", " under 4000"], ["Under ₹6,000", " under 6000"], ["Under ₹10,000", " under 10000"]] };
+    if (!c.occasion) return { key: "occasion", q: "What’s the occasion?", options: [["Day wedding", " for a day wedding"], ["Sangeet / night", " for a sangeet night"], ["Office", " for office"], ["Casual", " for casual wear"]] };
+    if (!c.gender && !c.categories.length) return { key: "gender", q: "Who is it for?", options: [["Women", " for women"], ["Men", " for men"]] };
+    return null;
+  }
+
+  // ---------- pre-checkout fit check ----------
+  function fitCheck(cart, profile, body, brief) {
+    const cl = brief && brief.climate;
+    const items = cart.map((it) => {
+      const s = CAT.skus.find((x) => x.sku === it.sku);
+      const flags = [];
+      let risk = s.returnRate;
+      const f = profile && body ? fitFor(s, body, profile.gender, profile.fitPref) : null;
+      if (s.fit !== "free") {
+        if (!profile) { flags.push({ level: "med", text: "No Mini You yet, so this size is a guess.", fix: { type: "profile" } }); risk += 0.08; }
+        else if (f && f.size !== it.size) {
+          const target = f.inStock ? f.size : f.alt && f.alt.size;
+          const cur = f.bySize[it.size];
+          flags.push({ level: "high", text: `Mini You predicts ${f.size} (${f.conf}%). ${it.size} scores ${cur ?? "n/a"}%.`, fix: target ? { type: "size", size: target } : null });
+          risk += 0.2;
+        } else if (f && f.conf < 65) { flags.push({ level: "med", text: `Fit confidence is only ${f.conf}% at ${f.size}.`, fix: null }); risk += 0.1; }
+      }
+      const twins = cart.filter((x) => x.sku === it.sku);
+      if (twins.length > 1) { flags.push({ level: "high", text: `You’re ordering ${twins.length} sizes of this item. Keep one; exchanges are free.`, fix: { type: "dedupe" } }); risk += 0.35; }
+      if (cl && cl.humidity >= 65 && s.breath <= 2) {
+        const swap = CAT.skus.filter((x) => x.cat === s.cat && x.gender === s.gender && x.breath >= 4 && x.sku !== s.sku && Math.abs(x.price - s.price) < s.price * 0.5)
+          .sort((a, b) => deltaE(a.hex, s.hex) - deltaE(b.hex, s.hex))[0];
+        flags.push({ level: "med", text: `${s.fabric} runs warm in ${cl.label}’s ~${cl.humidity}% humidity.`, fix: swap ? { type: "swap", sku: swap.sku, label: `${swap.name} (${inr(swap.price)})` } : null });
+        risk += 0.06;
+      }
+      if (brief && brief.c && brief.c.colours && brief.c.colours.length && !brief.c.colours.includes(s.family)) {
+        flags.push({ level: "low", text: `Colour (${s.colour}) is outside your brief.`, fix: null }); risk += 0.03;
+      }
+      return { ...it, s, flags, risk: Math.min(0.9, risk), fit: f };
+    });
+    return items;
+  }
+
+  return { init, parseIntent, mergeIntent, climate, estimateBody, fitFor, zonesForSize, rank, clarifier, fitCheck, deltaE, nearestFamily, CITIES, OCC_LABEL, inr, ZONES };
+})();
+
+
+ENGINE.init(DATA);
+const E = ENGINE, SKUS = DATA.skus, byId = Object.fromEntries(SKUS.map((s) => [s.sku, s]));
+const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const inr = E.inr;
+const CAT_LABEL = Object.fromEntries(SKUS.map((s) => [s.cat, s.catLabel]));
+
+// ---------- state ----------
+const store = { get(k, d) { try { const v = localStorage.getItem("saathi:" + k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("saathi:" + k, JSON.stringify(v)); } catch {} } };
+const S = {
+  profile: store.get("profile", null), cart: store.get("cart", []), orders: store.get("orders", []), log: store.get("log", []),
+  metrics: store.get("metrics", { searches: 0, reels: 0, shown: 0, dups: 0, filtered: 0, carts: 0, flags: 0, fixes: 0, orders: 0, kept: 0, returned: 0, llm: 0 }),
+  brief: null, focus: null, ai: true, sample: null, imagesOK: false, lastReply: "",
+};
+const save = () => { store.set("profile", S.profile); store.set("cart", S.cart); store.set("orders", S.orders); store.set("log", S.log); store.set("metrics", S.metrics); };
+const bump = (k, n = 1) => { S.metrics[k] = (S.metrics[k] || 0) + n; save(); };
+let toastT; function toast(t) { const el = $("#toast"); el.textContent = t; el.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (el.hidden = true), 2600); }
+
+// ---------- Claude ----------
+function setAI() {
+  const on = S.ai && S.sample;
+  $("#aiPill").classList.toggle("on", !!on);
+  $("#aiTxt").textContent = !S.sample ? (S.sampleChecked ? "Rules only (AI unavailable)" : "Connecting to AI…") : S.ai ? `${S.aiName} on` : "Rules only (Claude off)";
+}
+$("#aiPill").onclick = () => { if (!S.sample) { toast("No AI backend is connected, so Saathi uses its built-in rules."); return; } S.ai = !S.ai; setAI(); toast(S.ai ? `${S.aiName} on` : "Using built-in rules only"); };
+// Free AI backend (Groq via a serverless proxy that keeps the API key secret)
+const AI_CFG = window.SAATHI_AI || {};
+function aiEndpoint() {
+  if (AI_CFG.endpoint) return AI_CFG.endpoint;
+  if (/\.github\.io$/.test(location.hostname)) return AI_CFG.workerUrl || "";
+  return "/api/ai";
+}
+async function toJpegDataURL(blob, max = 1024) {
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = new Image(); img.src = url; await img.decode();
+    const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const cv = document.createElement("canvas"); cv.width = Math.round(img.naturalWidth * k); cv.height = Math.round(img.naturalHeight * k);
+    cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+    return cv.toDataURL("image/jpeg", 0.85);
+  } finally { URL.revokeObjectURL(url); }
+}
+function parseJSONLoose(t) {
+  try { return JSON.parse(t); } catch {}
+  const f = t.match(/```(?:json)?\s*([\s\S]*?)```/); if (f) { try { return JSON.parse(f[1]); } catch {} }
+  const a = t.indexOf("{"), b = t.lastIndexOf("}"); if (a >= 0 && b > a) { try { return JSON.parse(t.slice(a, b + 1)); } catch {} }
+  throw { code: "invalid_json", message: "No JSON in reply", text: t };
+}
+async function makeFreeAI() {
+  const ep = aiEndpoint();
+  if (!ep || location.protocol === "file:") return null;
+  try {
+    const r = await fetch(ep, { method: "GET" });
+    if (!r.ok) return null;
+    const h = await r.json();
+    if (!h || !h.ok) return null;
+    return {
+      name: h.label || "Free AI (Groq)",
+      limits: async () => (h.vision ? { images: { maxCount: 2 } } : {}),
+      json: async (prompt, opts = {}) => {
+        let imgs = opts.images ? (opts.images instanceof Blob ? [opts.images] : [...opts.images]) : [];
+        imgs = await Promise.all(imgs.slice(0, 2).map((b) => toJpegDataURL(b)));
+        let res;
+        try {
+          res = await fetch(ep, { method: "POST", headers: { "content-type": "application/json" }, signal: opts.signal,
+            body: JSON.stringify({ prompt, images: imgs, tier: opts.modelTier || "default" }) });
+        } catch (e) { throw { code: e && e.name === "AbortError" ? "cancelled" : "upstream_error", message: String(e) }; }
+        if (res.status === 429) throw { code: "rate_limited", message: "rate limited" };
+        if (!res.ok) throw { code: "upstream_error", message: "HTTP " + res.status };
+        const j = await res.json();
+        return parseJSONLoose(String(j.text || ""));
+      },
+    };
+  } catch { return null; }
+}
+S.aiName = "AI";
+(async () => {
+  await Promise.resolve();
+  try {
+    if (window.claude && claude.use) {
+      const s = await claude.use("sample");
+      if (s) { S.sample = s; S.aiName = "Claude"; try { const lim = await s.limits(); S.imagesOK = !!(lim && lim.images); } catch {} }
+    }
+  } catch {}
+  if (!S.sample) {
+    const f = await makeFreeAI();
+    if (f) { S.sample = f; S.aiName = f.name; try { const lim = await f.limits(); S.imagesOK = !!(lim && lim.images); } catch {} }
+  }
+  S.sampleChecked = true; setAI(); updatePhotoBtn(); updateReelBtn();
+})();
+function aiFail(e) {
+  const code = e && e.code;
+  if (["not_granted", "sampling_disabled", "not_declared", "capability_disabled", "capability_removed"].includes(code)) { S.sample = null; setAI(); return "The AI isn’t allowed here, so Saathi used its built-in rules."; }
+  if (code === "rate_limited") return "The free AI tier is busy (rate limit); built-in rules used for this request.";
+  if (code === "images_unavailable") { S.imagesOK = false; return "The AI backend can’t read images; using colour extraction."; }
+  return "The AI didn’t answer this time; built-in rules used.";
+}
+
+const INTENT_PROMPT = (q) => `You are the intent agent of an Indian fashion e-commerce shopping assistant. Convert the shopper's brief (English, Hindi or Hinglish) into constraints.
+Reply with ONLY a JSON object with these keys (use null or [] when not stated, never guess a budget):
+{"categories": subset of ["kurta_set","anarkali","saree","lehenga","sharara","coord","dress","top","shirt","kurta_m","nehru","trousers"] ("ethnic outfit" for women = ["kurta_set","anarkali","saree","lehenga","sharara"]; "suit" = kurta_set; men's kurta = kurta_m),
+"gender": "W"|"M"|null (who will wear it),
+"colours": subset of ["green","blue","pink","purple","yellow","orange","red","white","neutral","black","grey","teal"],
+"pastel": true|false|null, "occasion": one of ["wedding_day","wedding_night","haldi","mehendi","festive","office","party","vacation","casual"] or null,
+"time": "day"|"night"|null, "budgetMax": number in INR or null, "budgetMin": number or null, "metal": "silver"|"gold"|null (jewellery to pair with),
+"styles": subset of ["embroidered","printed","minimal","mirror work","zari","ribbed","flared","embellished","tailored","relaxed","fitted","textured","tiered"],
+"city": lowercase Indian city name or null, "breathable": true|false (true if heat, humidity or comfort matters), "fitPref": "snug"|"relaxed"|null,
+"summary": one short sentence restating the need in English}
+Example: {"categories":["kurta_set"],"gender":"W","colours":["yellow"],"pastel":null,"occasion":"haldi","time":"day","budgetMax":3000,"budgetMin":null,"metal":null,"styles":[],"city":null,"breathable":true,"fitPref":null,"summary":"A yellow kurta set for a haldi, up to ₹3,000."}
+Brief: """${q.slice(0, 1500)}"""`;
+
+// ---------- thumbnails ----------
+const SIL = {
+  kurta_set: '<path d="M38 10 L50 16 L62 10 L80 18 L88 50 L78 52 L74 36 L74 104 L26 104 L26 36 L22 52 L12 50 L20 18 Z"/><path class="lt" d="M32 104 L48 104 L47 126 L33 126 Z M52 104 L68 104 L67 126 L53 126 Z"/>',
+  kurta_m: '<path d="M38 10 L50 18 L62 10 L82 18 L90 54 L80 56 L74 36 L76 110 L24 110 L26 36 L20 56 L10 54 L18 18 Z"/><path class="lt" d="M32 110 L48 110 L47 126 L33 126 Z M52 110 L68 110 L67 126 L53 126 Z"/>',
+  anarkali: '<path d="M40 10 L50 15 L60 10 L74 18 L82 46 L74 48 L68 32 L64 44 L88 120 L12 120 L36 44 L32 32 L26 48 L18 46 L26 18 Z"/>',
+  saree: '<path d="M36 12 L64 12 L68 32 L32 32 Z"/><path d="M32 32 L68 32 L74 124 L26 124 Z"/><path class="dk" d="M58 12 L70 14 L44 78 L32 70 Z"/>',
+  lehenga: '<path d="M36 12 L64 12 L66 34 L34 34 Z"/><path d="M38 38 L62 38 L90 124 L10 124 Z"/><path class="lt" d="M60 10 L70 14 L80 90 L72 92 Z"/>',
+  coord: '<path d="M34 12 L50 16 L66 12 L80 20 L76 36 L68 32 L68 58 L32 58 L32 32 L24 36 L20 20 Z"/><path d="M32 62 L68 62 L70 126 L54 126 L50 80 L46 126 L30 126 Z"/>',
+  dress: '<path d="M38 10 L50 16 L62 10 L70 16 L66 40 L84 120 L16 120 L34 40 L30 16 Z"/>',
+  top: '<path d="M32 22 L50 28 L68 22 L86 32 L80 50 L70 46 L70 96 L30 96 L30 46 L20 50 L14 32 Z"/>',
+  sharara: '<path d="M38 10 L50 15 L62 10 L78 18 L84 44 L76 46 L72 32 L72 70 L28 70 L28 32 L24 46 L16 44 L22 18 Z"/><path class="lt" d="M30 72 L70 72 L86 126 L54 126 L50 92 L46 126 L14 126 Z"/>',
+  shirt: '<path d="M36 12 L44 8 L50 20 L56 8 L64 12 L84 22 L90 58 L80 60 L74 38 L74 104 L26 104 L26 38 L20 60 L10 58 L16 22 Z"/><path class="ln" d="M50 20 L50 104"/>',
+  nehru: '<path d="M36 10 L50 34 L64 10 L76 16 L78 100 L22 100 L24 16 Z"/><path class="ln" d="M50 34 L50 100"/>',
+  trousers: '<path d="M30 10 L70 10 L74 124 L56 124 L50 42 L44 124 L26 124 Z"/>',
+};
+function shade(hex, f) { const n = parseInt(hex.slice(1), 16); let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255; const m = (c) => Math.max(0, Math.min(255, Math.round(f > 0 ? c + (255 - c) * f : c * (1 + f)))); return `rgb(${m(r)},${m(g)},${m(b)})`; }
+function thumb(s) {
+  const id = "p" + s.sku.replace(/\W/g, "");
+  const light = E.deltaE(s.hex, "#FFFFFF") < 22;
+  const stroke = shade(s.hex, light ? -0.35 : -0.3);
+  const w = s.work.toLowerCase();
+  let pat = "";
+  const ac = s.metal === "silver" ? "#C9CED6" : "#D9A93A";
+  if (/print|bandhani|ikat|floral|polka|checks/.test(w)) pat = `<pattern id="${id}" width="10" height="10" patternUnits="userSpaceOnUse"><circle cx="3" cy="3" r="1.6" fill="${shade(s.hex, light ? -0.3 : 0.45)}"/><circle cx="8" cy="8" r="1.2" fill="${shade(s.hex, light ? -0.2 : 0.3)}"/></pattern>`;
+  else if (/leheriya|stripes/.test(w)) pat = `<pattern id="${id}" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(35)"><rect width="3" height="8" fill="${shade(s.hex, light ? -0.25 : 0.35)}"/></pattern>`;
+  else if (/ribbed/.test(w)) pat = `<pattern id="${id}" width="4" height="10" patternUnits="userSpaceOnUse"><rect width="1.2" height="10" fill="${shade(s.hex, -0.18)}"/></pattern>`;
+  else if (/zari|gota|sequin|brocade|jacquard|mirror|embroider|chikan/.test(w)) pat = `<pattern id="${id}" width="12" height="12" patternUnits="userSpaceOnUse"><path d="M6 2 L8 6 L6 10 L4 6 Z" fill="${/mirror/.test(w) ? "#C9CED6" : /embroider|chikan/.test(w) ? shade(s.hex, light ? -0.25 : 0.5) : ac}" opacity=".85"/></pattern>`;
+  const body = SIL[s.cat] || SIL.top;
+  return `<svg viewBox="0 0 100 130" role="img" aria-label="${esc(s.colour + " " + s.catLabel)}"><defs>${pat}</defs>
+  <g fill="${s.hex}" stroke="${stroke}" stroke-width="1.4" stroke-linejoin="round">${body.replace(/class="lt"/g, `fill="${shade(s.hex, light ? -0.08 : 0.25)}"`).replace(/class="dk"/g, `fill="${shade(s.hex, -0.15)}"`).replace(/class="ln"/g, 'fill="none"')}</g>
+  ${pat ? `<g fill="url(#${id})" stroke="none" opacity=".9">${body.replace(/<path class="ln"[^>]*\/>/g, "").replace(/class="(lt|dk)"/g, "")}</g>` : ""}</svg>`;
+}
+
+// ---------- shared card ----------
+function fitBadge(f) {
+  if (!f) return `<span class="fitb none">${S.profile ? "Fit n/a for this wearer" : "Add Mini You for your size"}</span>`;
+  if (f.free) return `<span class="fitb hi">Free size</span>`;
+  const size = f.inStock ? f.size : f.alt ? f.alt.size : f.size, conf = f.inStock ? f.conf : f.alt ? f.alt.conf : f.conf;
+  const cls = conf >= 75 ? "hi" : conf >= 60 ? "mid" : "lo";
+  return `<span class="fitb ${cls}">Size ${size} · ${conf}% fit</span>`;
+}
+function card(p, i) {
+  const r = p.r, s = r.sku, f = r.fit;
+  const sizes = Object.keys(s.stock);
+  const def = f ? (f.free ? "Free" : f.inStock ? f.size : f.alt ? f.alt.size : sizes.find((z) => s.stock[z] > 0)) : sizes.find((z) => s.stock[z] > 0);
+  const opts = sizes.map((z) => `<option value="${z}" ${z === def ? "selected" : ""} ${s.stock[z] ? "" : "disabled"}>${z}${s.stock[z] ? "" : " (sold out)"}</option>`).join("");
+  return `<article class="card"><div class="thumb">${thumb(s)}</div><div class="body">
+    <div class="slot">${esc(p.slot)}${r.dups ? ` · ${r.dups} look-alike${r.dups > 1 ? "s" : ""} grouped` : ""}</div>
+    <h3>${esc(s.name)}</h3>
+    <div class="meta">${esc(s.brand)} · ${esc(s.sku)} · ★ ${s.rating} (${s.reviews})</div>
+    <div class="price">${inr(s.price)}${s.mrp > s.price ? `<s>${inr(s.mrp)}</s>` : ""}</div>
+    ${fitBadge(f)}
+    <ul class="why">${r.reasons.slice(0, 5).map((x) => `<li>${esc(x)}</li>`).join("")}${r.warn.map((x) => `<li class="w">${esc(x)}</li>`).join("")}</ul>
+    <div class="acts"><select aria-label="Size" data-size="${s.sku}">${opts}</select><button class="btn sm" data-add="${s.sku}">Add to cart</button>
+    ${s.fit !== "free" ? `<button class="btn alt sm" data-fit="${s.sku}">Fit on Mini You</button>` : ""}</div>
+  </div></article>`;
+}
+function bindCards(root) {
+  $$("[data-add]", root).forEach((b) => (b.onclick = () => { const sku = b.dataset.add; const size = $(`[data-size="${sku}"]`, root).value; addToCart(sku, size); }));
+  $$("[data-fit]", root).forEach((b) => (b.onclick = () => { S.focus = { sku: b.dataset.fit, size: null }; go("miniyou"); }));
+}
+function resultsHTML(res, title, sub) {
+  if (!res.picks.length) return `<div class="empty"><h3>No exact match in the 100-SKU pilot catalog</h3><p class="small">${res.filtered} items were ruled out by budget, category, wearer or stock. Try raising the budget or removing a constraint.</p></div>`;
+  const allRows = res.scored.slice(0, 30).map((r, i) => `<tr><td class="num">${i + 1}</td><td><span class="sw" style="background:${r.sku.hex}"></span>${esc(r.sku.name)}</td><td>${esc(r.sku.brand)}</td><td class="num">${inr(r.sku.price)}</td><td class="num">${r.score.toFixed(1)}</td><td>${res.picks.some((p) => p.r === r) ? "Shown" : res.hidden.some((h) => h.sku === r.sku) ? "Look-alike, grouped" : "Ranked lower"}</td></tr>`).join("");
+  return `<div class="res-head"><div><div class="eyebrow">${esc(sub)}</div><h2>${esc(title)}</h2></div></div>
+  <div class="cards">${res.picks.map(card).join("")}</div>
+  <div class="dupnote"><span>Scored ${res.total} SKUs: ${res.filtered} ruled out, ${res.hidden.length} look-alike${res.hidden.length === 1 ? "" : "s"} grouped, ${res.picks.length} shown.</span><button class="linkbtn" data-toggle-all>See the full ranking</button></div>
+  <div class="tblwrap" data-all hidden><table><tr><th class="num">#</th><th>Item</th><th>Brand</th><th class="num">Price</th><th class="num">Score</th><th>Status</th></tr>${allRows}</table></div>`;
+}
+function mountResults(el, res, title, sub) {
+  el.innerHTML = resultsHTML(res, title, sub);
+  bindCards(el);
+  const t = $("[data-toggle-all]", el); if (t) t.onclick = () => { const a = $("[data-all]", el); a.hidden = !a.hidden; t.textContent = a.hidden ? "See the full ranking" : "Hide the full ranking"; };
+}
+
+// ---------- trace ----------
+function makeTrace(listEl, timeEl) {
+  const t0 = performance.now(); listEl.innerHTML = "";
+  return {
+    step(name, detail, state = "run") { const li = document.createElement("li"); li.className = state; li.innerHTML = `<span class="st"></span><div><b>${esc(name)}</b><div class="d">${esc(detail)}</div></div><span class="t">${Math.round(performance.now() - t0)} ms</span>`; listEl.append(li);
+      timeEl.textContent = ""; return { done(d, st = "done") { li.className = st; if (d != null) $(".d", li).textContent = d; $(".t", li).textContent = Math.round(performance.now() - t0) + " ms"; } }; },
+    end() { timeEl.textContent = (Math.round(performance.now() - t0) / 1000).toFixed(1) + " s"; },
+  };
+}
+
+// ---------- concierge ----------
+const PERSONAS = [
+  { who: "Ananya, 29 · Mumbai", what: "Day wedding, pastel, under ₹6,000", q: "I need a breathable, pastel ethnic outfit for a humid daytime wedding in Mumbai under ₹6,000 that pairs well with silver jewellery", prof: { gender: "W", height: 162, weight: 58, shape: "pear", fitPref: "regular" } },
+  { who: "Sunita, 46 · Nashik", what: "Hinglish: haldi suit for her daughter", q: "Mujhe beti ki haldi ke liye peela suit chahiye, ₹3,000 tak, cotton ho toh achha" },
+  { who: "Rohan, 34 · Bengaluru", what: "Office shirt, broad shoulders", q: "Formal shirt for client meetings under ₹2,500, I always struggle with fit at the shoulders", prof: { gender: "M", height: 178, weight: 80, shape: "athletic", fitPref: "regular" } },
+  { who: "Riya, 22 · Pune", what: "Shop a reel look", reel: true },
+];
+$("#personas").innerHTML = PERSONAS.map((p, i) => `<button class="chip persona" data-p="${i}"><b>${esc(p.who)}</b><span>${esc(p.what)}</span></button>`).join("");
+$$("[data-p]").forEach((b) => (b.onclick = () => {
+  const p = PERSONAS[+b.dataset.p];
+  if (p.reel) { go("reel"); useFrame(0); return; }
+  if (p.prof) { S.profile = { ...p.prof, overrides: {}, bias: {}, persona: p.who }; save(); toast(`Loaded ${p.who.split(",")[0]}’s Mini You`); }
+  $("#ask").value = p.q; runAsk(p.q);
+}));
+$("#askForm").onsubmit = (e) => { e.preventDefault(); const q = $("#ask").value.trim(); if (q) runAsk(q); };
+
+function constraintTags(c, cl) {
+  const t = [];
+  if (c.categories.length) t.push(["Item", c.categories.map((x) => CAT_LABEL[x]).join(" / ")]);
+  if (c.gender) t.push(["For", c.gender === "W" ? "Women" : "Men"]);
+  if (c.colours.length) t.push(["Colour", c.colours.join(", ")]);
+  if (c.pastel) t.push(["Tone", "pastel"]);
+  if (c.occasion) t.push(["Occasion", E.OCC_LABEL[c.occasion]]);
+  if (c.time) t.push(["Time", c.time]);
+  if (c.budgetMax) t.push(["Budget", "up to " + inr(c.budgetMax)]);
+  if (c.metal) t.push(["Jewellery", c.metal]);
+  if (c.styles.length) t.push(["Style", c.styles.join(", ")]);
+  if (cl) t.push(["Climate", `${cl.label} ~${cl.tempC}°C, ${cl.humidity}% RH`]);
+  else if (c.breathable) t.push(["Fabric", "breathable"]);
+  if (c.fitPref) t.push(["Fit", c.fitPref]);
+  return t.map(([k, v]) => `<span class="tag"><span class="muted">${esc(k)}</span> ${esc(v)}</span>`).join(" ");
+}
+
+let askCtl = null;
+async function runAsk(q) {
+  bump("searches");
+  $("#convPanel").hidden = false;
+  const th = $("#thread");
+  th.innerHTML = `<div class="msg user">${esc(q)}</div>`;
+  const tr = makeTrace($("#traceList"), $("#traceT"));
+  const o = tr.step("Orchestrator", "Planning: understand brief → add context → score catalog → check fit → pick distinct options");
+  o.done();
+  const r1 = tr.step("Intent agent · rules", "Parsing English, Hindi and Hinglish keywords");
+  let c = E.parseIntent(q);
+  r1.done(`Found ${[c.categories.length && "item", c.colours.length && "colour", c.occasion && "occasion", c.budgetMax && "budget", c.metal && "jewellery", c.city && "city"].filter(Boolean).join(", ") || "few constraints"}`);
+  const render = (c, note, refined) => {
+    const cl = E.climate(c.city);
+    const body = S.profile ? E.estimateBody(S.profile) : null;
+    const res = E.rank(c, { climate: cl, body, profile: S.profile });
+    S.brief = { c: res.c, climate: cl, q };
+    const ask = E.clarifier(res.c, "text");
+    const sum = c.summary || "Here’s what I understood.";
+    const reply = `${sum} I checked ${res.total} items and picked ${res.picks.length} distinct options${res.hidden.length ? `, grouping ${res.hidden.length} look-alike${res.hidden.length > 1 ? "s" : ""}` : ""}.`;
+    S.lastReply = reply + (res.picks[0] ? ` My top pick is the ${res.picks[0].r.sku.name} at ${inr(res.picks[0].r.sku.price)}.` : "");
+    th.innerHTML = `<div class="msg user">${esc(q)}</div><div class="msg bot"><div>${esc(reply)}</div><div class="chips">${constraintTags(res.c, cl)}</div>
+      ${note ? `<div class="small muted">${esc(note)}</div>` : ""}
+      ${ask ? `<div class="q">${esc(ask.q)}</div><div class="chips">${ask.options.map(([l, add]) => `<button class="chip" data-add-q="${esc(add)}">${esc(l)}</button>`).join("")}</div>` : ""}</div>`;
+    $$("[data-add-q]", th).forEach((b) => (b.onclick = () => { const nq = (q + b.dataset.addQ).trim(); $("#ask").value = nq; runAsk(nq); }));
+    $("#speakBtn").hidden = !("speechSynthesis" in window);
+    mountResults($("#shopResults"), res, refined ? "Your picks" : "Your picks", body ? `Personalised for ${S.profile.persona ? S.profile.persona.split(",")[0] + "’s" : "your"} Mini You` : "Add Mini You for size advice");
+    return res;
+  };
+  // context + retrieval with rules first (fast)
+  const ctxStep = tr.step("Context agent", "Looking up climate and occasion norms");
+  const cl0 = E.climate(c.city);
+  ctxStep.done(cl0 ? `${cl0.label}: ~${cl0.tempC}°C, ${cl0.humidity}% humidity (${cl0.note})` : c.breathable ? "No city given; prioritising breathable fabrics" : "No city given");
+  const fitStep = tr.step("Fit agent", S.profile ? "Matching Mini You against each brand’s garment chart" : "No Mini You yet");
+  fitStep.done(S.profile ? `Estimated ${Object.entries(E.estimateBody(S.profile)).map(([k, v]) => `${k} ${Math.round(v)}`).join(", ")} cm` : "Skipped: sizes shown without fit prediction", S.profile ? "done" : "skip");
+  const rs = tr.step("Retrieval + stylist critic", "Scoring all SKUs, grouping look-alikes");
+  let res = render(c);
+  rs.done(`${res.scored.length} passed hard filters; ${res.hidden.length} look-alikes grouped; ${res.picks.length} distinct picks`);
+  bump("shown", res.picks.length); bump("dups", res.hidden.length); bump("filtered", res.filtered);
+  // Claude refinement
+  if (S.sample && S.ai) {
+    askCtl?.abort(); askCtl = new AbortController(); const my = askCtl;
+    const ai = tr.step(`Intent agent · ${S.aiName}`, "Reading the brief for meaning the rules miss");
+    try {
+      const j = await S.sample.json(INTENT_PROMPT(q), { modelTier: "quick", signal: my.signal });
+      if (my !== askCtl) return;
+      bump("llm");
+      const merged = E.mergeIntent(c, j); merged.summary = typeof j.summary === "string" ? j.summary.slice(0, 220) : null;
+      const changed = JSON.stringify({ ...merged, summary: 0 }) !== JSON.stringify({ ...c, summary: 0 });
+      ai.done(changed ? "Refined the constraints; re-ranked" : "Confirmed the rule-based reading");
+      const rr = tr.step("Retrieval + stylist critic", "Re-scoring with refined constraints");
+      res = render(merged, null, true);
+      rr.done(`${res.picks.length} distinct picks; ${res.hidden.length} look-alikes grouped`);
+    } catch (e) {
+      if (e && e.code === "cancelled") return;
+      ai.done(aiFail(e), "skip");
+    }
+  } else tr.step(`Intent agent · ${S.aiName}`, S.sample ? "Off: using rules only" : "Unavailable in this view: using rules only").done(null, "skip");
+  tr.end();
+}
+$("#speakBtn").onclick = () => { try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(S.lastReply); u.lang = "en-IN"; u.rate = 1; speechSynthesis.speak(u); } catch { toast("Reading aloud isn’t available here."); } };
+
+// ---------- cart ----------
+function addToCart(sku, size) {
+  S.cart.push({ sku, size, at: Date.now() }); bump("carts"); save(); renderCartN();
+  const s = byId[sku]; toast(`Added ${s.name} (${size})`);
+}
+function renderCartN() { const n = $("#cartN"); n.textContent = S.cart.length; n.hidden = !S.cart.length; }
+
+function renderCart() {
+  const L = $("#cartList"), R = $("#cartSide");
+  if (!S.cart.length) {
+    L.innerHTML = `<div class="empty"><h3>Your cart is empty</h3><p class="small">Add picks from the Concierge or Reel-to-Cart. Saathi checks size, fabric and duplicates before you pay.</p><button class="btn sm" onclick="go('shop')">Go to Concierge</button></div>`;
+  } else {
+    const body = S.profile ? E.estimateBody(S.profile) : null;
+    const items = E.fitCheck(S.cart, S.profile, body, S.brief);
+    const nflags = items.reduce((a, i) => a + i.flags.filter((f) => f.level !== "low").length, 0);
+    L.innerHTML = `<div class="res-head"><div><div class="eyebrow">Pre-checkout fit &amp; style check</div><h2>${nflags ? `${nflags} thing${nflags > 1 ? "s" : ""} to fix before you pay` : "All clear"}</h2></div></div>` +
+      items.map((it, idx) => `<div class="citem"><div class="thumb">${thumb(it.s)}</div><div class="stack" style="gap:8px">
+        <div class="row" style="justify-content:space-between"><div><b>${esc(it.s.name)}</b><div class="meta">${esc(it.s.brand)} · Size ${esc(it.size)} · ${inr(it.s.price)}</div></div>
+        <div class="row"><span class="mono small">Return risk ${Math.round(it.risk * 100)}%</span><button class="linkbtn" data-rm="${idx}">Remove</button></div></div>
+        ${it.flags.length ? it.flags.map((f) => `<div class="flag ${f.level}"><span><span class="lv">${f.level === "high" ? "High" : f.level === "med" ? "Check" : "Note"}</span>${esc(f.text)}</span>${f.fix ? `<button class="btn sm alt" data-fix='${esc(JSON.stringify({ idx, ...f.fix }))}'>${f.fix.type === "size" ? `Switch to ${esc(f.fix.size)}` : f.fix.type === "dedupe" ? "Keep my Mini You size" : f.fix.type === "swap" ? "Swap to breathable" : "Create Mini You"}</button>` : ""}</div>`).join("")
+          : `<div class="flag ok"><span><span class="lv">OK</span>${it.fit && !it.fit.free ? `Size ${esc(it.size)} matches your Mini You (${it.fit.bySize[it.size]}% fit).` : "No fit or fabric risks found."}</span></div>`}
+        ${it.flags.find((f) => f.fix && f.fix.type === "swap") ? `<div class="small muted">Suggested: ${esc(it.flags.find((f) => f.fix && f.fix.type === "swap").fix.label)}</div>` : ""}
+      </div></div>`).join("");
+    $$("[data-rm]", L).forEach((b) => (b.onclick = () => { S.cart.splice(+b.dataset.rm, 1); save(); renderCartN(); renderCart(); }));
+    $$("[data-fix]", L).forEach((b) => (b.onclick = () => applyFix(JSON.parse(b.dataset.fix))));
+    bump("flags", 0);
+    const before = items.reduce((a, i) => a + i.risk, 0) / items.length;
+    const baseline = items.reduce((a, i) => a + i.s.returnRate, 0) / items.length;
+    const total = items.reduce((a, i) => a + i.s.price, 0);
+    R.innerHTML = `<div class="panel"><h3>Order summary</h3>
+      <div class="riskbar"><div class="kpi"><span>Items</span><b>${items.length}</b><span class="mono">${inr(total)}</span></div>
+      <div class="kpi"><span>Expected return risk</span><b style="color:${before > 0.3 ? "var(--bad)" : before > 0.2 ? "var(--warn)" : "var(--good)"}">${Math.round(before * 100)}%</b><span>Catalog average for these items: ${Math.round(baseline * 100)}%</span></div></div>
+      <p class="small muted">Risk starts from each item’s historical return rate and goes up for a size that doesn’t match Mini You, a missing fit profile, two sizes of one item, or a fabric wrong for the weather.</p>
+      <button class="btn acc" id="placeBtn">Place order (simulated)</button></div>` + ordersHTML();
+    $("#placeBtn").onclick = () => {
+      const now = Date.now();
+      items.forEach((it) => S.orders.unshift({ id: "OD" + String(now).slice(-6) + it.s.sku.slice(-3), sku: it.s.sku, size: it.size, risk: it.risk, at: now, outcome: null }));
+      bump("orders", items.length); S.cart = []; save(); renderCartN(); renderCart(); toast("Order placed. Mark how each item fit when it arrives.");
+    };
+    bindOrders(R);
+    return;
+  }
+  R.innerHTML = ordersHTML(); bindOrders(R);
+}
+function applyFix(f) {
+  const it = S.cart[f.idx]; if (!it) return;
+  if (f.type === "profile") { go("miniyou"); return; }
+  if (f.type === "size") it.size = f.size;
+  if (f.type === "dedupe") {
+    const body = S.profile ? E.estimateBody(S.profile) : null; const fit = body ? E.fitFor(byId[it.sku], body, S.profile.gender, S.profile.fitPref) : null;
+    const keep = fit ? (fit.inStock ? fit.size : fit.alt?.size) : it.size;
+    S.cart = S.cart.filter((x, i) => x.sku !== it.sku || i === f.idx); const k = S.cart.find((x) => x.sku === it.sku); if (k && keep) k.size = keep;
+  }
+  if (f.type === "swap") { const s2 = byId[f.sku]; it.sku = f.sku; it.size = Object.keys(s2.stock).find((z) => s2.stock[z] > 0); }
+  bump("fixes"); save(); renderCart(); toast("Fixed");
+}
+function ordersHTML() {
+  if (!S.orders.length) return "";
+  return `<div class="panel"><h3>Delivered orders</h3><p class="small muted">Tell Saathi how each one fit. Return reasons update your Mini You so the next size is better.</p>
+  ${S.orders.slice(0, 8).map((o) => { const s = byId[o.sku]; return `<div class="stack" style="gap:6px;padding:10px 0;border-top:1px solid var(--line)">
+    <div class="small"><b>${esc(s.name)}</b> · ${esc(o.size)}</div>
+    ${o.outcome ? `<div class="small ${o.outcome === "kept" ? "" : "muted"}">${o.outcome === "kept" ? "Kept" : "Returned: " + esc(o.outcome)}</div>` :
+      `<div class="chips"><button class="chip" data-out="${o.id}|kept">Kept it</button><button class="chip" data-out="${o.id}|tight">Too tight</button><button class="chip" data-out="${o.id}|loose">Too loose</button><button class="chip" data-out="${o.id}|look">Didn’t like the look</button></div>`}
+  </div>`; }).join("")}</div>`;
+}
+function bindOrders(root) {
+  $$("[data-out]", root).forEach((b) => (b.onclick = () => {
+    const [id, out] = b.dataset.out.split("|"); const o = S.orders.find((x) => x.id === id); if (!o) return;
+    const s = byId[o.sku];
+    if (out === "kept") { o.outcome = "kept"; bump("kept"); S.log.unshift({ at: Date.now(), t: `Kept ${s.name} in ${o.size}. Fit confirmed.` }); }
+    else if (out === "look") { o.outcome = "didn’t like the look"; bump("returned"); S.log.unshift({ at: Date.now(), t: `Returned ${s.name}: style. Similar ${s.work.toLowerCase()} pieces ranked lower next time.` }); }
+    else {
+      o.outcome = out === "tight" ? "too tight" : "too loose"; bump("returned");
+      if (S.profile && S.profile.gender === s.gender) {
+        const body = E.estimateBody(S.profile); const zr = E.zonesForSize(s, body, o.size, S.profile.fitPref);
+        const zones = (zr && zr.zones) || [];
+        const target = out === "tight" ? zones.slice().sort((a, b) => a.delta - b.delta)[0] : zones.slice().sort((a, b) => b.delta - a.delta)[0];
+        const z = target ? target.zone : S.profile.gender === "M" ? "chest" : "bust";
+        S.profile.bias = S.profile.bias || {}; S.profile.bias[z] = (S.profile.bias[z] || 0) + (out === "tight" ? 2 : -2);
+        S.log.unshift({ at: Date.now(), t: `Returned ${s.name} (${o.size}) ${o.outcome}. Mini You ${z} adjusted ${out === "tight" ? "+2" : "−2"} cm.` });
+        toast(`Mini You learned: ${z} ${out === "tight" ? "+2" : "−2"} cm`);
+      } else S.log.unshift({ at: Date.now(), t: `Returned ${s.name} (${o.size}) ${o.outcome}.` });
+    }
+    save(); renderCart();
+  }));
+}
+
+// ---------- Mini You ----------
+const SHAPES = { W: [["hourglass", "Hourglass"], ["pear", "Pear"], ["apple", "Apple"], ["rectangle", "Rectangle"], ["inverted", "Inverted triangle"]],
+  M: [["athletic", "Athletic"], ["lean", "Lean"], ["regular", "Regular"], ["broad_mid", "Broad midsection"]] };
+let draft = S.profile ? JSON.parse(JSON.stringify(S.profile)) : { gender: "W", height: 162, weight: 58, shape: "hourglass", fitPref: "regular", overrides: {}, bias: {} };
+function segBind(el, val, cb) { $$("button", el).forEach((b) => { b.setAttribute("aria-pressed", b.dataset.v === val); b.onclick = () => cb(b.dataset.v); }); }
+function renderForm() {
+  segBind($("#pGender"), draft.gender, (v) => { draft.gender = v; draft.shape = SHAPES[v][0][0]; draft.overrides = {}; if (v === "M" && draft.height < 165) { draft.height = 175; draft.weight = 74; } renderForm(); });
+  $("#pShape").innerHTML = SHAPES[draft.gender].map(([v, l]) => `<button type="button" data-v="${v}">${l}</button>`).join("");
+  segBind($("#pShape"), draft.shape, (v) => { draft.shape = v; renderForm(); });
+  segBind($("#pFit"), draft.fitPref, (v) => { draft.fitPref = v; renderForm(); });
+  $("#pH").value = draft.height; $("#pW").value = draft.weight;
+  const keys = draft.gender === "M" ? ["chest", "waist", "hip", "shoulder"] : ["bust", "waist", "hip", "shoulder"];
+  $("#pOver").innerHTML = keys.map((k) => `<label class="f" for="ov-${k}">${k[0].toUpperCase() + k.slice(1)} (cm)<input type="number" id="ov-${k}" data-ov="${k}" min="20" max="200" value="${draft.overrides?.[k] || ""}" placeholder="auto"></label>`).join("");
+  renderMy(true);
+}
+$("#pH").oninput = (e) => { draft.height = +e.target.value; renderMy(true); };
+$("#pW").oninput = (e) => { draft.weight = +e.target.value; renderMy(true); };
+$("#pOver").oninput = (e) => { const k = e.target.dataset.ov; if (k) { draft.overrides = draft.overrides || {}; draft.overrides[k] = +e.target.value || 0; renderMy(true); } };
+$("#profForm").onsubmit = (e) => { e.preventDefault(); S.profile = JSON.parse(JSON.stringify(draft)); delete S.profile.persona; save(); toast("Mini You saved. Sizes are now personalised."); renderMy(); };
+
+function avatarSVG(b, gender, zones) {
+  const cx = 110, k = 2;
+  const sh = (b.shoulder / 2) * k, bu = (gender === "M" ? b.chest : b.bust) * 0.32 * k / 2 * 1.0, wa = b.waist * 0.32 * k / 2, hi = b.hip * 0.34 * k / 2;
+  const Y = { shoulder: 74, bust: 104, chest: 104, waist: 144, hip: 180 };
+  const P = (s) => [cx + s[0], s[1]];
+  const L = (x) => cx - x, Rr = (x) => cx + x;
+  const path = `M ${L(9)} 54 L ${L(9)} 64 Q ${L(sh - 6)} 66 ${L(sh)} ${Y.shoulder} Q ${L(sh + 2)} ${Y.shoulder + 14} ${L(bu)} ${Y.bust} Q ${L(bu - 2)} ${Y.waist - 18} ${L(wa)} ${Y.waist} Q ${L(wa - 1)} ${Y.hip - 18} ${L(hi)} ${Y.hip}
+    Q ${L(hi + 1)} 230 ${L(hi - 12)} 318 L ${L(4)} 318 L ${L(3)} 206 L ${Rr(3)} 206 L ${Rr(4)} 318 L ${Rr(hi - 12)} 318 Q ${Rr(hi + 1)} 230 ${Rr(hi)} ${Y.hip}
+    Q ${Rr(wa - 1)} ${Y.hip - 18} ${Rr(wa)} ${Y.waist} Q ${Rr(bu - 2)} ${Y.waist - 18} ${Rr(bu)} ${Y.bust} Q ${Rr(sh + 2)} ${Y.shoulder + 14} ${Rr(sh)} ${Y.shoulder} Q ${Rr(sh - 6)} 66 ${Rr(9)} 64 L ${Rr(9)} 54 Z`;
+  const arm = (side) => { const x0 = side < 0 ? L(sh) : Rr(sh); const x1 = x0 + side * 12; return `M ${x0} ${Y.shoulder} Q ${x1 + side * 2} ${Y.shoulder + 8} ${x1} ${Y.shoulder + 20} L ${x1 - side * 2} 200 L ${x1 - side * 12} 200 L ${x0 - side * 6} ${Y.shoulder + 24} Z`; };
+  const col = { good: "var(--good)", tight: "var(--bad)", loose: "var(--warn)" };
+  const bands = (zones || []).map((z) => { const y = Y[z.zone]; const half = { shoulder: sh, bust: bu, chest: bu, waist: wa, hip: hi }[z.zone] + (z.zone === "shoulder" ? 0 : 4);
+    return `<line x1="${L(half)}" y1="${y}" x2="${Rr(half)}" y2="${y}" style="stroke:${col[z.status]}" stroke-width="5" stroke-linecap="round" opacity=".9"/>`; }).join("");
+  const labels = (zones && zones.length ? zones : Object.keys(Y).filter((z) => b[z] != null).map((z) => ({ zone: z }))).filter((z, i, a) => a.findIndex((q) => Y[q.zone] === Y[z.zone]) === i)
+    .map((z) => `<text x="214" y="${Y[z.zone] + 4}" text-anchor="end" font-size="10" style="fill:var(--muted)" font-family="JetBrains Mono, monospace">${Math.round(b[z.zone])}</text>`).join("");
+  return `<svg viewBox="0 0 220 330" role="img" aria-label="Mini You body outline${zones ? " with fit map" : ""}">
+    <circle cx="${cx}" cy="32" r="19" style="fill:var(--line)"/>
+    <path d="${arm(-1)}" style="fill:var(--line)"/><path d="${arm(1)}" style="fill:var(--line)"/>
+    <path d="${path}" style="fill:var(--surface);stroke:var(--muted)" stroke-width="1.5"/>
+    ${bands}${labels}</svg>`;
+}
+function renderMy(preview) {
+  const prof = preview ? draft : S.profile || draft;
+  const b = E.estimateBody(prof);
+  const out = $("#myOut");
+  const keys = Object.keys(b);
+  const focusS = S.focus && byId[S.focus.sku];
+  let fitBlock = "";
+  if (focusS && focusS.gender === prof.gender) {
+    const f = E.fitFor(focusS, b, prof.gender, prof.fitPref);
+    const size = S.focus.size || (f && (f.inStock ? f.size : f.alt?.size)) || f?.size;
+    const z = E.zonesForSize(focusS, b, size, prof.fitPref);
+    fitBlock = `<div class="panel"><div class="res-head"><div><div class="eyebrow">Fit map</div><h3>${esc(focusS.name)}</h3><div class="meta">${esc(focusS.brand)} · ${focusS.fit} fit · brand runs ${focusS.sizeOffset > 0 ? "large by " + focusS.sizeOffset + " cm" : focusS.sizeOffset < 0 ? "small by " + -focusS.sizeOffset + " cm" : "true to size"}</div></div>
+      <button class="linkbtn" id="clearFocus">Close</button></div>
+      <div class="seg" id="focusSizes">${Object.keys(focusS.stock).map((s) => `<button data-v="${s}" ${focusS.stock[s] ? "" : "disabled"}>${s} · ${f.bySize[s]}%</button>`).join("")}</div>
+      <div class="avatarwrap"><div class="avatar">${avatarSVG(b, prof.gender, z.zones)}</div>
+      <div class="stack" style="gap:10px"><div class="zl">${z.zones.map((q) => `<div class="${q.status}"><span>${q.zone[0].toUpperCase() + q.zone.slice(1)}</span><span class="mono">${q.delta > 0 ? "+" : ""}${q.delta} cm · ${q.status === "good" ? "good" : q.status}</span></div>`).join("")}</div>
+      <p class="small muted">Ease = garment’s cut measurement minus yours. Saathi recommends <b>${esc(f.size)}</b> at ${f.conf}% confidence${f.inStock ? "" : f.alt ? `; it’s sold out, so ${esc(f.alt.size)} (${f.alt.conf}%) is the best in-stock size` : "; it’s sold out"}.</p>
+      <div class="row"><button class="btn sm" id="focusAdd">Add ${esc(size)} to cart</button></div></div></div></div>`;
+    setTimeout(() => {
+      segBind($("#focusSizes"), size, (v) => { S.focus.size = v; renderMy(preview); });
+      $("#clearFocus").onclick = () => { S.focus = null; renderMy(preview); };
+      $("#focusAdd").onclick = () => addToCart(focusS.sku, size);
+    });
+  } else if (focusS) fitBlock = `<div class="flag med"><span>That item is ${focusS.gender === "W" ? "women’s" : "men’s"} wear. Switch “Shopping for” to see its fit.</span></div>`;
+  // brand size table for a reference garment type
+  const refCat = prof.gender === "M" ? "shirt" : "kurta_set";
+  const brands = Object.keys(DATA.brands).filter((br) => SKUS.some((s) => s.brand === br && s.gender === prof.gender));
+  const rows = brands.map((br) => {
+    const fake = { sku: "x", cat: refCat, gender: prof.gender, fit: "regular", stretch: 0, sizeOffset: DATA.brands[br], returnRate: 0, stock: Object.fromEntries(Object.keys(DATA.charts[prof.gender]).map((z) => [z, 1])) };
+    const f = E.fitFor(fake, b, prof.gender, prof.fitPref);
+    return `<tr><td>${esc(br)}</td><td class="num">${DATA.brands[br] > 0 ? "+" : ""}${DATA.brands[br]} cm</td><td><b>${f.size}</b></td><td class="num">${f.conf}%</td></tr>`;
+  }).join("");
+  out.innerHTML = `${fitBlock}<div class="panel"><div class="res-head"><div><div class="eyebrow">${preview && JSON.stringify(draft) !== JSON.stringify(S.profile) ? "Preview, not saved yet" : S.profile ? "Saved" : "Preview"}</div><h2>${S.profile?.persona && !preview ? esc(S.profile.persona.split(",")[0]) + "’s Mini You" : "Your Mini You"}</h2></div></div>
+    <div class="avatarwrap"><div class="avatar">${avatarSVG(b, prof.gender, null)}</div>
+    <div class="stack" style="gap:12px"><div class="meas">${keys.map((k) => `<div><span>${k[0].toUpperCase() + k.slice(1)}</span><b>${Math.round(b[k])} cm</b>${prof.overrides?.[k] ? '<span>you entered</span>' : prof.bias?.[k] ? `<span>learned ${prof.bias[k] > 0 ? "+" : ""}${prof.bias[k]} cm</span>` : "<span>estimated</span>"}</div>`).join("")}</div>
+    <div><h3 style="margin-bottom:6px">Your size, brand by brand</h3><p class="small muted" style="margin-bottom:8px">For a regular-fit ${prof.gender === "M" ? "shirt" : "kurta set"}. Same body, different labels.</p>
+    <div class="tblwrap"><table><tr><th>Brand</th><th class="num">Runs</th><th>Your size</th><th class="num">Fit</th></tr>${rows}</table></div></div></div></div></div>
+    <div class="panel"><h3>What Mini You has learned</h3>${S.log.length ? `<ul class="log">${S.log.slice(0, 8).map((l) => `<li>${esc(l.t)}</li>`).join("")}</ul>` : `<p class="small muted">Nothing yet. When you mark a delivered order as too tight or too loose in the cart, Mini You adjusts that body zone.</p>`}</div>`;
+}
+
+// photos → Claude
+function updatePhotoBtn() { const ok = S.sample && S.ai && S.imagesOK; $("#phGo").disabled = !(ok && $("#phOk").checked && ($("#phF").files.length || $("#phS").files.length)); $("#photoPanel").hidden = !(S.sample && S.imagesOK); }
+["#phF", "#phS", "#phOk"].forEach((s) => ($(s).onchange = updatePhotoBtn));
+$("#phGo").onclick = async () => {
+  const imgs = [...$("#phF").files, ...$("#phS").files].slice(0, 2);
+  $("#phOut").textContent = "Reading your proportions…"; $("#phGo").disabled = true;
+  const shapes = SHAPES[draft.gender].map((x) => x[0]).join('","');
+  try {
+    const j = await S.sample.json(`These are ${imgs.length} photo(s) (front and/or side) of a person who wants clothing size advice. Their height is ${draft.height} cm. Estimate proportions only from what is visible; do not comment on appearance. Reply with ONLY JSON: {"shape": one of ["${shapes}"], "shoulder_cm": number or null, "${draft.gender === "M" ? "chest" : "bust"}_cm": number or null, "waist_cm": number or null, "hip_cm": number or null, "confidence": "low"|"medium"|"high", "note": one short sentence}. If the photos don't show a full body, set numbers to null and confidence to "low".`, { images: imgs, modelTier: "default", cache: false });
+    bump("llm");
+    if (SHAPES[draft.gender].some((x) => x[0] === j.shape)) draft.shape = j.shape;
+    draft.overrides = draft.overrides || {};
+    if (j.confidence !== "low") for (const k of ["shoulder", draft.gender === "M" ? "chest" : "bust", "waist", "hip"]) { const v = +j[k + "_cm"]; if (v > 20 && v < 200) draft.overrides[k] = Math.round(v); }
+    $("#phOut").textContent = `AI read: ${j.shape || "shape unclear"}, ${j.confidence || "low"} confidence. ${j.note || ""} Review the numbers, then save.`;
+    $("#phF").value = ""; $("#phS").value = ""; renderForm();
+  } catch (e) { $("#phOut").textContent = aiFail(e); }
+  updatePhotoBtn();
+};
+
+// ---------- reel ----------
+const FRAMES = [
+  { title: "Beige ribbed co-ord", cat: "coord", note: "under ₹3,000", draw: (g, W, H) => frameDraw(g, W, H, { bg1: "#7FB7B2", bg2: "#E8D9C0", item: "coord", col: "#D6C2A2", rib: true, caption: "@riyas.reels · Ribbed co-ord for brunch", skin: "#C98E6B" }) },
+  { title: "Lavender sharara set", cat: "sharara", note: "", draw: (g, W, H) => frameDraw(g, W, H, { bg1: "#F2C4CF", bg2: "#FBEDE3", item: "sharara", col: "#C9B6E2", gota: true, caption: "@mehendi.diaries · Mehendi look", skin: "#B7805C" }) },
+  { title: "Navy office shirt", cat: "shirt", note: "", draw: (g, W, H) => frameDraw(g, W, H, { bg1: "#3D4A5C", bg2: "#A7B4C4", item: "shirt", col: "#22305A", caption: "@workfitsindia · Monday shirt", skin: "#A87150" }) },
+];
+function frameDraw(g, W, H, o) {
+  const grd = g.createLinearGradient(0, 0, 0, H); grd.addColorStop(0, o.bg1); grd.addColorStop(1, o.bg2); g.fillStyle = grd; g.fillRect(0, 0, W, H);
+  g.fillStyle = "rgba(0,0,0,.08)"; g.fillRect(0, H * 0.78, W, H * 0.22);
+  g.save(); g.translate(W * 0.18, H * 0.16); g.scale(W * 0.0064, W * 0.0064);
+  g.fillStyle = o.skin; g.beginPath(); g.arc(50, -6, 11, 0, 7); g.fill(); g.fillRect(46, 2, 8, 10);
+  const p = new Path2D((SIL[o.item].match(/d="([^"]+)"/g) || []).map((x) => x.slice(3, -1)).join(" "));
+  g.fillStyle = o.col; g.fill(p); g.strokeStyle = "rgba(0,0,0,.18)"; g.lineWidth = 0.8; g.stroke(p);
+  if (o.rib) { g.save(); g.clip(p); g.strokeStyle = "rgba(0,0,0,.12)"; g.lineWidth = 0.6; for (let x = 10; x < 95; x += 2.5) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 130); g.stroke(); } g.restore(); }
+  if (o.gota) { g.save(); g.clip(p); g.fillStyle = "#E3C66B"; for (let y = 8; y < 130; y += 9) for (let x = 12 + (y % 18 ? 4 : 0); x < 92; x += 9) { g.beginPath(); g.arc(x, y, 0.9, 0, 7); g.fill(); } g.restore(); }
+  g.restore();
+  g.fillStyle = "rgba(0,0,0,.35)"; g.fillRect(0, H - 70, W, 70);
+  g.fillStyle = "#fff"; g.font = "600 15px Instrument Sans, Arial, sans-serif"; g.fillText(o.caption, 14, H - 40);
+  g.font = "13px Instrument Sans, Arial, sans-serif"; g.fillText("♪ Original audio · 128K likes", 14, H - 18);
+  g.fillStyle = "rgba(255,255,255,.9)"; [0.38, 0.48, 0.58].forEach((y) => { g.beginPath(); g.arc(W - 26, H * y, 10, 0, 7); g.fill(); });
+}
+const frameBlobs = [];
+function buildFrames() {
+  const wrap = $("#frames");
+  FRAMES.forEach((f, i) => {
+    const cv = document.createElement("canvas"); cv.width = 360; cv.height = 640; f.draw(cv.getContext("2d"), 360, 640);
+    const url = cv.toDataURL("image/png"); f.url = url; cv.toBlob((b) => (frameBlobs[i] = b), "image/png");
+    const b = document.createElement("button"); b.className = "frame"; b.innerHTML = `<img src="${url}" alt="Sample reel frame: ${esc(f.title)}"><span>${esc(f.title)}</span>`;
+    b.onclick = () => useFrame(i); wrap.append(b);
+  });
+}
+const REEL = { blob: null, url: null, hintCat: null, cat: null, title: null };
+function useFrame(i) { const f = FRAMES[i]; REEL.blob = frameBlobs[i] || null; REEL.url = f.url; REEL.hintCat = f.cat; REEL.cat = null; REEL.title = f.title; if (f.note) $("#reelNote").value = f.note; showRef(); if (!REEL.blob) setTimeout(() => { REEL.blob = frameBlobs[i]; updateReelBtn(); }, 200); }
+function takeFile(file) { if (!file || !/^image\//.test(file.type)) { toast("Choose a JPG, PNG or WebP image."); return; } REEL.blob = file; REEL.url = URL.createObjectURL(file); REEL.hintCat = null; REEL.cat = null; REEL.title = file.name; showRef(); }
+$("#reelFile").onchange = (e) => takeFile(e.target.files[0]);
+const drop = $("#drop");
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); }; drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); takeFile(e.dataTransfer.files[0]); };
+document.addEventListener("paste", (e) => { if (currentView !== "reel") return; const f = [...(e.clipboardData?.files || [])][0]; if (f) takeFile(f); });
+function showRef() {
+  $("#reelResults").innerHTML = `<div class="panel"><div class="refbox"><img src="${REEL.url}" alt="Your reference look"><div class="stack" style="gap:8px"><div class="eyebrow">Reference</div><h3>${esc(REEL.title || "Your screenshot")}</h3><p class="small muted">Ready. Press “Find similar”.</p></div></div></div>`;
+  const needCat = !(S.sample && S.ai && S.imagesOK);
+  $("#reelCatAsk").hidden = !needCat;
+  const cats = ["coord", "dress", "top", "kurta_set", "anarkali", "sharara", "saree", "lehenga", "shirt", "kurta_m", "nehru", "trousers"];
+  REEL.cat = REEL.cat || REEL.hintCat || null;
+  $("#reelCats").innerHTML = cats.map((c) => `<button type="button" data-v="${c}">${CAT_LABEL[c]}</button>`).join("");
+  segBind($("#reelCats"), REEL.cat, (v) => { REEL.cat = v; showRefCats(); });
+  updateReelBtn();
+}
+function showRefCats() { segBind($("#reelCats"), REEL.cat, (v) => { REEL.cat = v; showRefCats(); }); updateReelBtn(); }
+function updateReelBtn() { const needCat = !(S.sample && S.ai && S.imagesOK); $("#reelGo").disabled = !REEL.url || (needCat && !REEL.cat); if (REEL.url) $("#reelCatAsk").hidden = !needCat; }
+
+async function dominantHex(url) {
+  const img = new Image(); img.src = url; await img.decode();
+  const cv = document.createElement("canvas"); const W = 90, H = 160; cv.width = W; cv.height = H; const g = cv.getContext("2d"); g.drawImage(img, 0, 0, W, H);
+  const d = g.getImageData(Math.round(W * 0.3), Math.round(H * 0.3), Math.round(W * 0.4), Math.round(H * 0.45)).data;
+  const px = []; for (let i = 0; i < d.length; i += 4) px.push([d[i], d[i + 1], d[i + 2]]);
+  let C = [px[0], px[Math.floor(px.length / 3)], px[Math.floor((2 * px.length) / 3)], px[px.length - 1]];
+  for (let it = 0; it < 8; it++) {
+    const acc = C.map(() => [0, 0, 0, 0]);
+    for (const p of px) { let bi = 0, bd = 1e9; C.forEach((c, j) => { const dd = (p[0] - c[0]) ** 2 + (p[1] - c[1]) ** 2 + (p[2] - c[2]) ** 2; if (dd < bd) { bd = dd; bi = j; } }); acc[bi][0] += p[0]; acc[bi][1] += p[1]; acc[bi][2] += p[2]; acc[bi][3]++; }
+    C = acc.map((a, j) => (a[3] ? [a[0] / a[3], a[1] / a[3], a[2] / a[3], a[3]] : C[j]));
+  }
+  C.sort((a, b) => (b[3] || 0) - (a[3] || 0));
+  const c = C[0]; return "#" + c.slice(0, 3).map((v) => Math.round(v).toString(16).padStart(2, "0")).join("");
+}
+const VISION_PROMPT = (note) => `You are the vision agent of an Indian fashion shopping assistant. The image is a screenshot from a social media reel or post. Identify the main garment the person is wearing.
+Reply with ONLY JSON: {"category": one of ["kurta_set","anarkali","saree","lehenga","sharara","coord","dress","top","shirt","kurta_m","nehru","trousers"], "gender": "W"|"M", "colour_name": short name, "colour_hex": "#RRGGBB" of the garment's main colour, "colours": subset of ["green","blue","pink","purple","yellow","orange","red","white","neutral","black","grey","teal"], "pastel": true|false, "fabric_guess": short, "styles": subset of ["embroidered","printed","minimal","mirror work","zari","ribbed","flared","embellished","tailored","relaxed","fitted","textured","tiered"], "occasion": one of ["wedding_day","wedding_night","haldi","mehendi","festive","office","party","vacation","casual"] or null, "description": one sentence}
+Shopper's note: "${String(note || "").slice(0, 300)}"`;
+
+$("#reelGo").onclick = async () => {
+  bump("reels"); $("#reelGo").disabled = true;
+  $("#reelTracePanel").hidden = false;
+  const tr = makeTrace($("#reelTrace"), $("#reelTraceT"));
+  tr.step("Orchestrator", "Plan: read the look → match colour and style → apply budget and fit → pick distinct options").done();
+  const note = $("#reelNote").value.trim();
+  const noteC = E.parseIntent(note);
+  let attrs = null, source = "";
+  if (S.sample && S.ai && S.imagesOK && REEL.blob) {
+    const v = tr.step(`Vision agent · ${S.aiName}`, "Reading garment, colour, fabric and style from the screenshot");
+    try { attrs = await S.sample.json(VISION_PROMPT(note), { images: REEL.blob, modelTier: "default" }); bump("llm"); source = S.aiName + " vision"; v.done(attrs.description || "Read the garment"); }
+    catch (e) { v.done(aiFail(e), "skip"); }
+  }
+  const hexStep = tr.step("Colour extraction", "Clustering pixels in the centre of the frame");
+  const domHex = await dominantHex(REEL.url);
+  hexStep.done(`Dominant garment colour ${domHex}`);
+  const cats = ["kurta_set", "anarkali", "saree", "lehenga", "sharara", "coord", "dress", "top", "shirt", "kurta_m", "nehru", "trousers"];
+  const cat = attrs && cats.includes(attrs.category) ? attrs.category : REEL.cat || REEL.hintCat;
+  const targetHex = attrs && /^#[0-9a-f]{6}$/i.test(attrs.colour_hex || "") ? attrs.colour_hex : domHex;
+  const near = E.nearestFamily(targetHex);
+  const c = { ...noteC, categories: cat ? [cat] : [], colours: [], pastel: null, styles: attrs && Array.isArray(attrs.styles) ? attrs.styles : [] };
+  if (attrs && (attrs.gender === "W" || attrs.gender === "M")) c.gender = attrs.gender; else if (cat) c.gender = ["shirt", "kurta_m", "nehru", "trousers"].includes(cat) ? "M" : "W";
+  if (!attrs && /ribbed|rib/i.test(REEL.title || "")) c.styles.push("ribbed");
+  if (!c.occasion && attrs && attrs.occasion) c.occasion = attrs.occasion;
+  const cl = E.climate(c.city);
+  const body = S.profile ? E.estimateBody(S.profile) : null;
+  const rr = tr.step("Retrieval + stylist critic", "Scoring by visual colour distance, category, style, budget and fit");
+  const res = E.rank(c, { climate: cl, body, profile: S.profile, targetHex, refStyles: c.styles });
+  rr.done(`${res.scored.length} candidates; ${res.hidden.length} look-alikes grouped; ${res.picks.length} distinct picks`);
+  bump("shown", res.picks.length); bump("dups", res.hidden.length); bump("filtered", res.filtered);
+  S.brief = { c: res.c, climate: cl, q: note };
+  tr.end();
+  const ask = E.clarifier(res.c, "reel");
+  const el = $("#reelResults");
+  el.innerHTML = `<div class="panel"><div class="refbox"><img src="${REEL.url}" alt="Your reference look"><div class="stack" style="gap:8px">
+    <div class="eyebrow">What Saathi saw · ${esc(source || "colour extraction + your category")}</div>
+    <h3>${esc(attrs?.description || `${CAT_LABEL[cat] || "Garment"} in a ${near?.colour.toLowerCase() || "similar"} tone`)}</h3>
+    <div class="swpair"><span class="swbig" style="background:${targetHex}"></span><span class="mono">${esc(targetHex)}</span><span class="muted">nearest catalog shade: ${esc(near?.colour || "")}</span></div>
+    <div class="chips">${[cat && CAT_LABEL[cat], attrs?.fabric_guess, ...(c.styles || []), c.budgetMax && "up to " + inr(c.budgetMax), c.occasion && E.OCC_LABEL[c.occasion]].filter(Boolean).map((x) => `<span class="tag">${esc(x)}</span>`).join(" ")}</div>
+    ${ask ? `<div class="small" style="font-weight:600">${esc(ask.q)}</div><div class="chips">${ask.options.map(([l, add]) => `<button class="chip" data-reel-add="${esc(add)}">${esc(l)}</button>`).join("")}</div>` : ""}
+  </div></div></div><div class="stack" id="reelCards"></div>`;
+  mountResults($("#reelCards"), res, "Shop this look", body ? "Sized for your Mini You" : "Add Mini You for size advice");
+  $$("[data-reel-add]", el).forEach((b) => (b.onclick = () => { $("#reelNote").value = ($("#reelNote").value + b.dataset.reelAdd).trim(); $("#reelGo").click(); }));
+  updateReelBtn();
+};
+
+// ---------- catalog ----------
+function renderCatalog() {
+  const sel = $("#catC");
+  if (!sel.options.length) sel.innerHTML = `<option value="">All categories</option>` + [...new Set(SKUS.map((s) => s.cat))].map((c) => `<option value="${c}">${CAT_LABEL[c]}</option>`).join("");
+  const q = $("#catQ").value.toLowerCase(), cc = sel.value, g = $("#catG").value;
+  const rows = SKUS.filter((s) => (!cc || s.cat === cc) && (!g || s.gender === g) && (!q || `${s.name} ${s.brand} ${s.colour} ${s.fabric} ${s.work} ${s.occasions.join(" ")}`.toLowerCase().includes(q)));
+  $("#catCount").textContent = `${rows.length} of ${SKUS.length} SKUs`;
+  $("#catTbl").innerHTML = `<tr><th>SKU</th><th>Item</th><th>Brand</th><th>Fabric</th><th class="num">Breathes</th><th>Occasions</th><th>Pairs with</th><th class="num">Price</th><th class="num">Return rate</th><th>Stock by size</th></tr>` +
+    rows.map((s) => `<tr><td class="mono">${s.sku}</td><td><span class="sw" style="background:${s.hex}"></span>${esc(s.name)}</td><td>${esc(s.brand)}</td><td>${esc(s.fabric)}</td><td class="num">${s.breath}/5</td><td>${s.occasions.map((o) => E.OCC_LABEL[o]).join(", ")}</td><td>${s.metal}</td><td class="num">${inr(s.price)}</td><td class="num">${Math.round(s.returnRate * 100)}%</td><td class="mono">${Object.entries(s.stock).map(([k, v]) => `${k}:${v}`).join(" ")}</td></tr>`).join("");
+}
+["#catQ", "#catC", "#catG"].forEach((s) => ($(s).oninput = renderCatalog));
+let downloads = null;
+(async () => { try { if (window.claude && claude.use) downloads = await claude.use("downloads"); } catch {} $("#dlCsv").hidden = $("#dlJson").hidden = !downloads; })();
+function csv() {
+  const head = ["sku", "name", "brand", "category", "gender", "colour", "hex", "family", "pastel", "fabric", "breathability", "stretch", "work", "styles", "occasions", "metal", "fit", "price", "mrp", "rating", "reviews", "return_rate", "size_offset_cm", "stock"];
+  const q = (v) => `"${String(v).replace(/"/g, '""')}"`;
+  return [head.join(",")].concat(SKUS.map((s) => [s.sku, s.name, s.brand, s.catLabel, s.gender, s.colour, s.hex, s.family, s.pastel, s.fabric, s.breath, s.stretch, s.work, s.styles.join("|"), s.occasions.join("|"), s.metal, s.fit, s.price, s.mrp, s.rating, s.reviews, s.returnRate, s.sizeOffset, Object.entries(s.stock).map(([k, v]) => k + ":" + v).join("|")].map(q).join(","))).join("\n");
+}
+$("#dlCsv").onclick = async () => { try { await downloads.save({ filename: "saathi_catalog_100_skus.csv", data: new Blob([csv()], { type: "text/csv" }) }); } catch (e) { toast("Download didn’t start."); } };
+$("#dlJson").onclick = async () => { try { await downloads.save({ filename: "saathi_catalog.json", data: new Blob([JSON.stringify(DATA, null, 1)], { type: "application/json" }) }); } catch (e) { toast("Download didn’t start."); } };
+
+// ---------- pilot ----------
+function renderPilot() {
+  const m = S.metrics;
+  const tiles = [["Briefs and reels handled", m.searches + m.reels, `${m.llm} AI calls`], ["Distinct picks shown", m.shown, `${m.dups} look-alikes grouped`],
+    ["Added to cart", m.carts, `${m.fixes} fit-check fixes accepted`], ["Orders · kept · returned", `${m.orders} · ${m.kept} · ${m.returned}`, `${S.log.filter((l) => /adjusted/.test(l.t)).length} Mini You updates`]];
+  $("#sessKpis").innerHTML = tiles.map(([a, b, c]) => `<div class="kpi"><span>${esc(a)}</span><b>${esc(b)}</b><span>${esc(c)}</span></div>`).join("");
+  calc();
+}
+function calc() {
+  const s1 = +$("#s1").value / 100, s2 = +$("#s2").value / 10, s3 = +$("#s3").value / 100, s4 = +$("#s4").value / 100;
+  $("#o1").textContent = Math.round(s1 * 100) + "%"; $("#o2").textContent = s2.toFixed(1) + "×"; $("#o3").textContent = Math.round(s3 * 100) + "%"; $("#o4").textContent = Math.round(s4 * 100) + "%";
+  const up = s1 * (s2 - 1), dn = s3 * s4;
+  $("#impC").textContent = (up >= 0 ? "+" : "") + Math.round(up * 100) + "%"; $("#impCf").textContent = `${Math.round(s1 * 100)}% × (${s2.toFixed(1)} − 1)`;
+  $("#impR").textContent = "−" + Math.round(dn * 100) + "%"; $("#impRf").textContent = `${Math.round(s3 * 100)}% × ${Math.round(s4 * 100)}%`;
+  const a = up >= 0.2, b = dn >= 0.15;
+  $("#impVerdict").innerHTML = `${a ? "Meets" : "Misses"} the +20% conversion target and ${b ? "meets" : "misses"} the −15% returns target under these assumptions. <span class="muted">Benchmarks: an AI shopping assistant at a UK fashion retailer reported up to +25% conversion vs keyword search; one 2025 study found AI-chat shoppers converting at 12.3% vs 3.1%.</span>`;
+}
+["#s1", "#s2", "#s3", "#s4"].forEach((s) => ($(s).oninput = calc));
+
+// ---------- routing ----------
+let currentView = "shop";
+const VIEWS = ["shop", "reel", "miniyou", "cart", "catalog", "pilot"];
+function go(v) {
+  if (!VIEWS.includes(v)) v = "shop"; currentView = v;
+  VIEWS.forEach((x) => ($("#v-" + x).hidden = x !== v));
+  $$(".tab").forEach((t) => t.setAttribute("aria-selected", t.dataset.v === v));
+  if (v === "miniyou") { draft = S.profile ? JSON.parse(JSON.stringify(S.profile)) : draft; renderForm(); updatePhotoBtn(); }
+  if (v === "cart") renderCart();
+  if (v === "catalog") renderCatalog();
+  if (v === "pilot") renderPilot();
+  try { history.replaceState(null, "", "#" + v); } catch {}
+  window.scrollTo({ top: 0 });
+}
+$$(".tab").forEach((t) => (t.onclick = () => go(t.dataset.v)));
+buildFrames(); renderCartN(); setAI();
+go((location.hash || "#shop").slice(1));
+</script>
+
+</body>
+</html>
