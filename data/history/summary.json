@@ -1,0 +1,23 @@
+{
+ "period": "2025-11 to 2026-10",
+ "customers": 14000,
+ "orders": 67052,
+ "order_lines": 92972,
+ "reviews": 16921,
+ "returns": 29610,
+ "return_rate": 0.3185,
+ "exchanges": 3970,
+ "return_reasons": {
+  "too_tight": 0.2949,
+  "didnt_like": 0.1956,
+  "quality": 0.1637,
+  "colour_different": 0.1547,
+  "too_warm": 0.1061,
+  "too_loose": 0.064,
+  "late": 0.021
+ },
+ "multi_item_orders": 0.3114,
+ "searches": 120693,
+ "zero_result_v1": 0.7265,
+ "zero_result_v2": 0.1744
+}
